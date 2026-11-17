@@ -1,6 +1,7 @@
 {
   "@@locale": "zh",
   "aboutFlauncher": "关于",
+  "createdBy": "创作者",
   "addCategory": "添加分类",
   "addSection": "添加分区",
   "alphabetical": "按字母顺序",

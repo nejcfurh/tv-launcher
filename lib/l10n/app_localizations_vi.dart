@@ -12,6 +12,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get aboutFlauncher => 'Giới thiệu';
 
   @override
+  String get createdBy => 'Tạo bởi';
+
+  @override
   String get addCategory => 'Thêm danh mục';
 
   @override

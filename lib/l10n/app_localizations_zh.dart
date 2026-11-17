@@ -12,6 +12,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutFlauncher => '关于';
 
   @override
+  String get createdBy => '创作者';
+
+  @override
   String get addCategory => '添加分类';
 
   @override

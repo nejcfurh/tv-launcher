@@ -110,6 +110,12 @@ abstract class AppLocalizations {
   /// **'About'**
   String get aboutFlauncher;
 
+  /// No description provided for @createdBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Created by'**
+  String get createdBy;
+
   /// No description provided for @addCategory.
   ///
   /// In en, this message translates to:

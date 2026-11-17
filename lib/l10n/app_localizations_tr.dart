@@ -12,6 +12,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get aboutFlauncher => 'Hakkında';
 
   @override
+  String get createdBy => 'Oluşturan';
+
+  @override
   String get addCategory => 'Kategori ekle';
 
   @override

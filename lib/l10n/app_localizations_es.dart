@@ -12,6 +12,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get aboutFlauncher => 'Acerca de';
 
   @override
+  String get createdBy => 'Creado por';
+
+  @override
   String get addCategory => 'Agregar categoría';
 
   @override

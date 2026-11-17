@@ -99,6 +99,23 @@ void main() {
     verify(appsService.openSettings());
   });
 
+  testWidgets("shows Created by with the creator logo", (tester) async {
+    final settingsService = MockSettingsService();
+    final appsService = MockAppsService();
+    when(appsService.categories).thenReturn([]);
+    when(appsService.applications).thenReturn([]);
+    when(settingsService.appHighlightAnimationEnabled).thenReturn(true);
+
+    await _pumpWidgetWithProviders(tester, settingsService, appsService);
+
+    expect(find.text("Created by"), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((w) =>
+          w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/nejcfurh_logo.png'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets("'About' opens about dialog", (tester) async {
     final settingsService = MockSettingsService();
     final appsService = MockAppsService();
