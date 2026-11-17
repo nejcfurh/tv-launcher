@@ -429,11 +429,13 @@ class _SourceAppIcon extends StatefulWidget {
 }
 
 /// White logos for apps whose own icon has its background baked in.
-const Map<String, String> kSourceAppLogoAssets = {
-  'com.netflix.ninja': 'assets/logo_netflix.png',
-  'com.wbd.stream': 'assets/logo_hbo.png',
-  'com.google.android.youtube.tv': 'assets/logo_youtube.png',
-  'com.apple.atve.androidtv.appletv': 'assets/logo_appletv.png',
+const Map<String, ({String asset, double height})> kSourceAppLogoAssets = {
+  'com.netflix.ninja': (asset: 'assets/logo_netflix.png', height: 15),
+  // The HBO wordmark is dense and heavy, so it reads larger than the others at the same height.
+  'com.wbd.stream': (asset: 'assets/logo_hbo.png', height: 13),
+  'com.google.android.youtube.tv': (asset: 'assets/logo_youtube.png', height: 18),
+  'com.apple.atve.androidtv.appletv': (asset: 'assets/logo_appletv.png', height: 18),
+  'com.skyshowtime.skyshowtime.google': (asset: 'assets/logo_skyshowtime.png', height: 18),
 };
 
 class _SourceAppIconState extends State<_SourceAppIcon> {
@@ -476,13 +478,13 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
 
   @override
   Widget build(BuildContext context) {
-    final asset = kSourceAppLogoAssets[widget.packageName];
-    if (asset != null) {
+    final logo = kSourceAppLogoAssets[widget.packageName];
+    if (logo != null) {
       return _logo(
         Image.asset(
-          asset,
-          key: ValueKey(asset),
-          height: _height,
+          logo.asset,
+          key: ValueKey(logo.asset),
+          height: logo.height,
           fit: BoxFit.contain,
           filterQuality: FilterQuality.medium,
           errorBuilder: (_, __, ___) => _name(),

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flauncher/l10n/app_localizations.dart';
@@ -271,6 +272,16 @@ void main() {
       final withName = await badgeHeight();
 
       expect(withName, withLogo);
+    });
+
+    test('every bundled source logo exists', () {
+      for (final logo in kSourceAppLogoAssets.values) {
+        expect(File(logo.asset).existsSync(), isTrue, reason: logo.asset);
+        expect(logo.height, inInclusiveRange(10, 18), reason: logo.asset);
+      }
+      expect(kSourceAppLogoAssets['com.skyshowtime.skyshowtime.google']?.asset, 'assets/logo_skyshowtime.png');
+      // HBO is shown smaller than the rest.
+      expect(kSourceAppLogoAssets['com.wbd.stream']!.height, lessThan(kSourceAppLogoAssets['com.skyshowtime.skyshowtime.google']!.height));
     });
 
     testWidgets('clicking watch button triggers launchItem', (tester) async {
