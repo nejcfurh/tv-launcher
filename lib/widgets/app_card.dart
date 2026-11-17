@@ -593,15 +593,13 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
     } else if (_validationKeys.contains(key)) {
       if (!_clicked) {
         setState(() => _clicked = true);
-        Future.delayed(const Duration(milliseconds: 150), () {
-          if (!mounted) return;
-          context.read<AppsService>().launchApp(widget.application);
-          // Reset after a short delay so it looks normal when user returns
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              setState(() => _clicked = false);
-            }
-          });
+        // Launch right away; the press animation plays while the app opens.
+        context.read<AppsService>().launchApp(widget.application);
+        // Reset after a short delay so it looks normal when user returns
+        Future.delayed(const Duration(milliseconds: 650), () {
+          if (mounted) {
+            setState(() => _clicked = false);
+          }
         });
       }
       return KeyEventResult.handled;

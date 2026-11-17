@@ -270,6 +270,22 @@ void main() {
     verify(appsService.launchApp(app));
   });
 
+  testWidgets("Pressing select launches the app without waiting for the press animation", (tester) async {
+    final appsService = mkAppService();
+    final app = fakeApp(packageName: "me.efesser.flauncher", name: "FLauncher", version: "1.0.0");
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(fakeCategory(name: "Favorites", order: 0), [app]),
+    ]);
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    verify(appsService.launchApp(app));
+
+    // Let the reset timer finish so the test ends with no pending timers.
+    await tester.pump(const Duration(milliseconds: 700));
+  });
+
   testWidgets("Long pressing on app opens ApplicationInfoPanel", (tester) async {
     final appsService = mkAppService();
     final app = fakeApp(

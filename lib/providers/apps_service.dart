@@ -456,19 +456,16 @@ class AppsService extends ChangeNotifier
   }
 
   Future<void> launchApp(App app) async {
+    // Ask Android to open the app before the database write and the rebuild, so neither delays it.
+    final Future<void> launch = app.action == null
+        ? _fLauncherChannel.launchApp(app.packageName)
+        : _fLauncherChannel.launchActivityFromAction(app.action!);
+
     app.lastLaunchedAt = DateTime.now();
     await _database.updateApp(app.packageName, AppsCompanion(lastLaunchedAt: Value(app.lastLaunchedAt)));
     notifyListeners();
 
-    Future<void> future;
-    if (app.action == null) {
-      future = _fLauncherChannel.launchApp(app.packageName);
-    }
-    else {
-      future = _fLauncherChannel.launchActivityFromAction(app.action!);
-    }
-
-    return future;
+    return launch;
   }
 
   Future<void> openAppInfo(App app) => _fLauncherChannel.openAppInfo(app.packageName);
