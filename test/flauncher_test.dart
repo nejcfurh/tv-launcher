@@ -150,6 +150,25 @@ void main() {
     verify(appsService.launchApp(browser));
   });
 
+  testWidgets("Router HDD shortcut shows the bare VLC cone", (tester) async {
+    final appsService = mkAppService();
+    final vlc = fakeApp(packageName: "org.videolan.vlc", name: "VLC", version: "1.0.0");
+    when(appsService.categoriesWithApps).thenReturn([]);
+    when(appsService.getApplication("org.videolan.vlc")).thenReturn(vlc);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")),
+        matching: find.byWidgetPredicate(
+            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/vlc_cone.png'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets("Browser shortcut prefers TV Bro over the TCL browser", (tester) async {
     final appsService = mkAppService();
     final tvBro = fakeApp(packageName: "com.phlox.tvwebbrowser", name: "TV Bro", version: "1.0.0");

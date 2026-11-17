@@ -203,12 +203,20 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
 }
 
 /// Apps opened from the top bar instead of the dock. Each shortcut opens the first of its
-/// packages that is installed, and is hidden when none is. With [useAppIcon] it shows the
-/// app's own icon, otherwise [icon] in the style of the settings and network icons.
-const List<({List<String> packageNames, IconData icon, bool useAppIcon, String label})> kTopBarShortcuts = [
-  (packageNames: ['com.android.vending'], icon: Icons.shop_outlined, useAppIcon: true, label: 'Play Store'),
-  (packageNames: ['com.phlox.tvwebbrowser', 'com.tcl.browser'], icon: Icons.public, useAppIcon: false, label: 'Browser'),
-  (packageNames: ['org.videolan.vlc'], icon: Icons.dns_outlined, useAppIcon: true, label: 'Router HDD'),
+/// packages that is installed, and is hidden when none is. It shows [asset] when set, else the
+/// app's own icon with [useAppIcon], else [icon] in the style of the settings and network icons.
+const List<({List<String> packageNames, IconData icon, bool useAppIcon, String? asset, String label})>
+    kTopBarShortcuts = [
+  (packageNames: ['com.android.vending'], icon: Icons.shop_outlined, useAppIcon: true, asset: null, label: 'Play Store'),
+  (
+    packageNames: ['com.phlox.tvwebbrowser', 'com.tcl.browser'],
+    icon: Icons.public,
+    useAppIcon: false,
+    asset: null,
+    label: 'Browser',
+  ),
+  // VLC's own icon is the cone on an orange square; the bare cone matches the other top bar icons.
+  (packageNames: ['org.videolan.vlc'], icon: Icons.dns_outlined, useAppIcon: false, asset: 'assets/vlc_cone.png', label: 'Router HDD'),
 ];
 
 Widget _barIcon(IconData icon) => Icon(
@@ -217,6 +225,17 @@ Widget _barIcon(IconData icon) => Icon(
       color: Colors.white,
       shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
     );
+
+Widget _shortcutIcon(({List<String> packageNames, IconData icon, bool useAppIcon, String? asset, String label}) shortcut, App app) {
+  final asset = shortcut.asset;
+  if (asset != null) {
+    return Image.asset(asset, width: 24, height: 24, filterQuality: FilterQuality.medium);
+  }
+  if (shortcut.useAppIcon) {
+    return _ShortcutIcon(packageName: app.packageName, fallback: shortcut.icon);
+  }
+  return _barIcon(shortcut.icon);
+}
 
 class _AppShortcuts extends StatelessWidget {
   const _AppShortcuts();
@@ -240,9 +259,7 @@ class _AppShortcuts extends StatelessWidget {
                 key: Key("top_bar_shortcut_${app.packageName}"),
                 onPressed: () => context.read<AppsService>().launchApp(app),
                 semanticLabel: shortcut.label,
-                child: shortcut.useAppIcon
-                    ? _ShortcutIcon(packageName: app.packageName, fallback: shortcut.icon)
-                    : _barIcon(shortcut.icon),
+                child: _shortcutIcon(shortcut, app),
               ),
             ),
       ],
