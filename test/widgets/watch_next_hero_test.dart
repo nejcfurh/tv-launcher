@@ -242,7 +242,9 @@ void main() {
 
       expect(appsService.foregroundIconRequests, contains('com.disney.disneyplus'));
       final badgeRow = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Row)).first;
-      expect(find.descendant(of: badgeRow, matching: find.byType(Image)), findsOneWidget);
+      final logo = tester.widget<Image>(find.descendant(of: badgeRow, matching: find.byType(Image)));
+      expect(logo.color, Colors.white);
+      expect(logo.colorBlendMode, BlendMode.srcIn);
       expect(find.textContaining('DISNEY'), findsNothing);
     });
 
@@ -280,8 +282,9 @@ void main() {
         expect(logo.height, inInclusiveRange(10, 18), reason: logo.asset);
       }
       expect(kSourceAppLogoAssets['com.skyshowtime.skyshowtime.google']?.asset, 'assets/logo_skyshowtime.png');
-      // HBO is shown smaller than the rest.
-      expect(kSourceAppLogoAssets['com.wbd.stream']!.height, lessThan(kSourceAppLogoAssets['com.skyshowtime.skyshowtime.google']!.height));
+      // HBO and SkyShowtime are wide, heavy wordmarks, so they are shown smaller than the 18 px maximum.
+      expect(kSourceAppLogoAssets['com.wbd.stream']!.height, 13);
+      expect(kSourceAppLogoAssets['com.skyshowtime.skyshowtime.google']!.height, 14);
     });
 
     testWidgets('clicking watch button triggers launchItem', (tester) async {

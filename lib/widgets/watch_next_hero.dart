@@ -431,11 +431,12 @@ class _SourceAppIcon extends StatefulWidget {
 /// White logos for apps whose own icon has its background baked in.
 const Map<String, ({String asset, double height})> kSourceAppLogoAssets = {
   'com.netflix.ninja': (asset: 'assets/logo_netflix.png', height: 15),
-  // The HBO wordmark is dense and heavy, so it reads larger than the others at the same height.
+  // The HBO and SkyShowtime wordmarks are wide and heavy, so they read larger than the others at
+  // the same height.
   'com.wbd.stream': (asset: 'assets/logo_hbo.png', height: 13),
   'com.google.android.youtube.tv': (asset: 'assets/logo_youtube.png', height: 18),
   'com.apple.atve.androidtv.appletv': (asset: 'assets/logo_appletv.png', height: 18),
-  'com.skyshowtime.skyshowtime.google': (asset: 'assets/logo_skyshowtime.png', height: 18),
+  'com.skyshowtime.skyshowtime.google': (asset: 'assets/logo_skyshowtime.png', height: 14),
 };
 
 class _SourceAppIconState extends State<_SourceAppIcon> {
@@ -507,6 +508,9 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
             key: ValueKey(widget.packageName),
             height: _height,
             fit: BoxFit.contain,
+            // Drawn in white like the bundled logos; the icon layer is transparent around the logo.
+            color: Colors.white,
+            colorBlendMode: BlendMode.srcIn,
             filterQuality: FilterQuality.medium,
             gaplessPlayback: true,
             errorBuilder: (_, __, ___) => _name(),
