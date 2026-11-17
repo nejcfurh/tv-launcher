@@ -255,6 +255,24 @@ void main() {
       expect(find.text(' DISNEY+'), findsOneWidget);
     });
 
+    testWidgets('badge keeps the same height with a logo and with only a name', (tester) async {
+      Future<double> badgeHeight() async {
+        await tester.pumpAndSettle();
+        final badge = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Container)).first;
+        return tester.getSize(badge).height;
+      }
+
+      await tester.pumpWidget(createTestWidget());
+      final withLogo = await badgeHeight();
+
+      appsService.foregroundIcon = Uint8List(0);
+      watchNextService.testItems = disneyItems;
+      await tester.pumpWidget(createTestWidget(items: disneyItems));
+      final withName = await badgeHeight();
+
+      expect(withName, withLogo);
+    });
+
     testWidgets('clicking watch button triggers launchItem', (tester) async {
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();

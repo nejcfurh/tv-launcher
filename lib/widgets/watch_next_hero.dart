@@ -69,8 +69,8 @@ class WatchNextHero extends StatelessWidget {
     final app = activeItem.packageName != null ? appsService.getApplication(activeItem.packageName) : null;
     final appName = app?.name;
     final localizations = AppLocalizations.of(context)!;
-    final sourceBadge =
-        (appName != null ? localizations.watchNextOn : localizations.watchNextSectionTitle).toUpperCase();
+    final sourceBadge = (appName != null ? localizations.watchNextOn : localizations.watchNextSectionTitle)
+        .toUpperCase();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: _kWatchNextHeroHorizontalPadding),
@@ -151,13 +151,18 @@ class _HeroInfo extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(sourceBadge, maxLines: 1, style: _kBadgeTextStyle),
-              if (sourcePackageName != null)
-                _SourceAppIcon(packageName: sourcePackageName!, appName: sourceAppName ?? ''),
-            ],
+          // Fixed height, so items with a logo and items with only text line up the same.
+          child: SizedBox(
+            height: 18,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(sourceBadge, maxLines: 1, style: _kBadgeTextStyle),
+                if (sourcePackageName != null)
+                  _SourceAppIcon(packageName: sourcePackageName!, appName: sourceAppName ?? ''),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -459,28 +464,30 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
   Widget _name() => Text(' ${widget.appName.toUpperCase()}', maxLines: 1, style: _kBadgeTextStyle);
 
   Widget _logo(Widget image) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(width: 7),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: _maxWidth, maxHeight: _height),
-            child: image,
-          ),
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const SizedBox(width: 7),
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: _maxWidth, maxHeight: _height),
+        child: image,
+      ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
     final asset = kSourceAppLogoAssets[widget.packageName];
     if (asset != null) {
-      return _logo(Image.asset(
-        asset,
-        key: ValueKey(asset),
-        height: _height,
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.medium,
-        errorBuilder: (_, __, ___) => _name(),
-      ));
+      return _logo(
+        Image.asset(
+          asset,
+          key: ValueKey(asset),
+          height: _height,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (_, __, ___) => _name(),
+        ),
+      );
     }
     return FutureBuilder<Uint8List>(
       future: _icon,
@@ -492,15 +499,17 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
         if (bytes == null || bytes.isEmpty) {
           return _name();
         }
-        return _logo(Image.memory(
-          bytes,
-          key: ValueKey(widget.packageName),
-          height: _height,
-          fit: BoxFit.contain,
-          filterQuality: FilterQuality.medium,
-          gaplessPlayback: true,
-          errorBuilder: (_, __, ___) => _name(),
-        ));
+        return _logo(
+          Image.memory(
+            bytes,
+            key: ValueKey(widget.packageName),
+            height: _height,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.medium,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) => _name(),
+          ),
+        );
       },
     );
   }
