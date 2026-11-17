@@ -393,6 +393,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get watchNextSectionTitle => 'Xem tiếp';
 
   @override
+  String get watchNextOn => 'Xem tiếp trên';
+
+  @override
   String get showWatchNextSection => 'Hiện mục Xem tiếp';
 
   @override

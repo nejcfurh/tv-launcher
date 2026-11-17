@@ -119,11 +119,12 @@ class TestAppsService extends ChangeNotifier implements AppsService {
   }
 
   final List<String> foregroundIconRequests = [];
+  Uint8List? foregroundIcon;
 
   @override
   Future<Uint8List> getAppIconForeground(String packageName) async {
     foregroundIconRequests.add(packageName);
-    return _onePixelPng;
+    return foregroundIcon ?? _onePixelPng;
   }
 
   @override
@@ -204,18 +205,28 @@ void main() {
 
       expect(find.text('Severance'), findsOneWidget);
       expect(find.textContaining('Mark leads a team'), findsOneWidget);
-      expect(find.textContaining('NETFLIX'), findsOneWidget);
+      expect(find.text('WATCH NEXT ON'), findsOneWidget);
       expect(find.text('Resume'), findsOneWidget);
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     });
 
-    testWidgets('badge shows the source app icon next to its name', (tester) async {
+    testWidgets('badge reads WATCH NEXT ON followed by the source app icon', (tester) async {
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
 
       expect(appsService.foregroundIconRequests, contains('com.netflix.ninja'));
-      final badgeRow = find.ancestor(of: find.textContaining('NETFLIX'), matching: find.byType(Row)).first;
+      final badgeRow = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Row)).first;
       expect(find.descendant(of: badgeRow, matching: find.byType(Image)), findsOneWidget);
+      expect(find.textContaining('NETFLIX'), findsNothing);
+    });
+
+    testWidgets('badge names the source app when it has no icon', (tester) async {
+      appsService.foregroundIcon = Uint8List(0);
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.text('WATCH NEXT ON'), findsOneWidget);
+      expect(find.text(' NETFLIX'), findsOneWidget);
     });
 
     testWidgets('clicking watch button triggers launchItem', (tester) async {

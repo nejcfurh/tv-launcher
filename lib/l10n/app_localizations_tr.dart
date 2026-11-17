@@ -393,6 +393,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get watchNextSectionTitle => 'Sıradaki İzlenecek';
 
   @override
+  String get watchNextOn => 'Sıradaki İzlenecek:';
+
+  @override
   String get showWatchNextSection => 'Sıradaki İzlenecek Bölümünü Göster';
 
   @override

@@ -69,9 +69,8 @@ class WatchNextHero extends StatelessWidget {
     final app = activeItem.packageName != null ? appsService.getApplication(activeItem.packageName) : null;
     final appName = app?.name;
     final localizations = AppLocalizations.of(context)!;
-    final sourceBadge = appName != null
-        ? '${localizations.watchNextSectionTitle.toUpperCase()} • ${appName.toUpperCase()}'
-        : localizations.watchNextSectionTitle.toUpperCase();
+    final sourceBadge =
+        (appName != null ? localizations.watchNextOn : localizations.watchNextSectionTitle).toUpperCase();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: _kWatchNextHeroHorizontalPadding),
@@ -82,6 +81,7 @@ class WatchNextHero extends StatelessWidget {
           _HeroInfo(
             sourceBadge: sourceBadge,
             sourcePackageName: app?.packageName,
+            sourceAppName: appName,
             title: activeItem.title,
             description: activeItem.description?.trim(),
             progressPercent: activeItem.progressPercent,
@@ -115,9 +115,12 @@ class WatchNextHero extends StatelessWidget {
   }
 }
 
+const _kBadgeTextStyle = TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1);
+
 class _HeroInfo extends StatelessWidget {
   final String sourceBadge;
   final String? sourcePackageName;
+  final String? sourceAppName;
   final String title;
   final String? description;
   final int? progressPercent;
@@ -125,6 +128,7 @@ class _HeroInfo extends StatelessWidget {
   const _HeroInfo({
     required this.sourceBadge,
     this.sourcePackageName,
+    this.sourceAppName,
     required this.title,
     required this.description,
     required this.progressPercent,
@@ -150,18 +154,9 @@ class _HeroInfo extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (sourcePackageName != null) ...[
-                _SourceAppIcon(packageName: sourcePackageName!),
-                const SizedBox(width: 6),
-              ],
-              Flexible(
-                child: Text(
-                  sourceBadge,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1),
-                ),
-              ),
+              Text(sourceBadge, maxLines: 1, style: _kBadgeTextStyle),
+              if (sourcePackageName != null)
+                _SourceAppIcon(packageName: sourcePackageName!, appName: sourceAppName ?? ''),
             ],
           ),
         ),
@@ -417,11 +412,12 @@ class _HeroPaginationIndicator extends StatelessWidget {
   }
 }
 
-/// The source app's icon without its background, sized to the badge text. Empty until loaded.
+/// The source app's icon after "WATCH NEXT ON", or its name when the app has no icon to show.
 class _SourceAppIcon extends StatefulWidget {
   final String packageName;
+  final String appName;
 
-  const _SourceAppIcon({required this.packageName});
+  const _SourceAppIcon({required this.packageName, required this.appName});
 
   @override
   State<_SourceAppIcon> createState() => _SourceAppIconState();
@@ -447,26 +443,32 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox.square(
-      dimension: _size,
-      child: FutureBuilder<Uint8List>(
-        future: _icon,
-        builder: (context, snapshot) {
-          final bytes = snapshot.data;
-          if (bytes == null || bytes.isEmpty) {
-            return const SizedBox.shrink();
-          }
-          return Image.memory(
-            bytes,
-            key: ValueKey(widget.packageName),
-            width: _size,
-            height: _size,
-            filterQuality: FilterQuality.medium,
-            gaplessPlayback: true,
-            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-          );
-        },
-      ),
+    return FutureBuilder<Uint8List>(
+      future: _icon,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const SizedBox(width: _size + 6, height: _size);
+        }
+        final bytes = snapshot.data;
+        if (bytes == null || bytes.isEmpty) {
+          return Text(' ${widget.appName.toUpperCase()}', maxLines: 1, style: _kBadgeTextStyle);
+        }
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(width: 6),
+            Image.memory(
+              bytes,
+              key: ValueKey(widget.packageName),
+              width: _size,
+              height: _size,
+              filterQuality: FilterQuality.medium,
+              gaplessPlayback: true,
+              errorBuilder: (_, __, ___) => Text(widget.appName.toUpperCase(), style: _kBadgeTextStyle),
+            ),
+          ],
+        );
+      },
     );
   }
 }

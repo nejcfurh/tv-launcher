@@ -387,6 +387,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get watchNextSectionTitle => '继续观看';
 
   @override
+  String get watchNextOn => '继续观看 ·';
+
+  @override
   String get showWatchNextSection => '显示“继续观看”分区';
 
   @override

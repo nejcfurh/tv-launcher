@@ -818,6 +818,12 @@ abstract class AppLocalizations {
   /// **'Watch Next'**
   String get watchNextSectionTitle;
 
+  /// No description provided for @watchNextOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch Next on'**
+  String get watchNextOn;
+
   /// No description provided for @showWatchNextSection.
   ///
   /// In en, this message translates to:
