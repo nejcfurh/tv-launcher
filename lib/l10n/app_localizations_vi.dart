@@ -9,7 +9,7 @@ class AppLocalizationsVi extends AppLocalizations {
   AppLocalizationsVi([String locale = 'vi']) : super(locale);
 
   @override
-  String get aboutFlauncher => 'Giới thiệu Arc Launcher';
+  String get aboutFlauncher => 'Giới thiệu';
 
   @override
   String get addCategory => 'Thêm danh mục';

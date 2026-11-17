@@ -9,7 +9,7 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get aboutFlauncher => '关于 Arc Launcher';
+  String get aboutFlauncher => '关于';
 
   @override
   String get addCategory => '添加分类';
