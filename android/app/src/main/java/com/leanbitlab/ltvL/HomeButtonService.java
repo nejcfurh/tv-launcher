@@ -20,7 +20,10 @@ package com.omeda.arc;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 /**
  * Google TV opens its own launcher on Home even when another app holds the HOME role, and on TCL
@@ -28,7 +31,21 @@ import android.view.accessibility.AccessibilityEvent;
  * home screen to come to the front and replaces it with this launcher.
  */
 public class HomeButtonService extends AccessibilityService {
-    static final String STOCK_HOME_ACTIVITY = "com.google.android.apps.tv.launcherx.home.HomeActivity";
+    static final String STOCK_HOME_PACKAGE = "com.google.android.apps.tv.launcherx";
+    static final String STOCK_HOME_ACTIVITY = STOCK_HOME_PACKAGE + ".home.HomeActivity";
+
+    // The active window can still be empty right after connecting (boot, reinstall), so check again.
+    private static final long[] CONNECT_CHECK_DELAYS_MS = {0, 1000, 3000};
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+
+    @Override
+    protected void onServiceConnected() {
+        super.onServiceConnected();
+        for (long delay : CONNECT_CHECK_DELAYS_MS) {
+            handler.postDelayed(this::replaceStockHomeIfShowing, delay);
+        }
+    }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
@@ -36,9 +53,24 @@ public class HomeButtonService extends AccessibilityService {
             return;
         }
         CharSequence className = event.getClassName();
-        if (className == null || !STOCK_HOME_ACTIVITY.contentEquals(className)) {
+        if (className != null && STOCK_HOME_ACTIVITY.contentEquals(className)) {
+            openLauncher();
+        }
+    }
+
+    /** Covers the stock home screen that was already in front before this service connected. */
+    private void replaceStockHomeIfShowing() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) {
             return;
         }
+        CharSequence packageName = root.getPackageName();
+        if (packageName != null && STOCK_HOME_PACKAGE.contentEquals(packageName)) {
+            openLauncher();
+        }
+    }
+
+    private void openLauncher() {
         Intent intent = new Intent(this, MainActivity.class)
                 .setAction(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_HOME)
@@ -48,5 +80,11 @@ public class HomeButtonService extends AccessibilityService {
 
     @Override
     public void onInterrupt() {
+    }
+
+    @Override
+    public void onDestroy() {
+        handler.removeCallbacksAndMessages(null);
+        super.onDestroy();
     }
 }
