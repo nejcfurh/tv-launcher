@@ -202,11 +202,12 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
   }
 }
 
-/// Apps opened from the top bar instead of the dock. A shortcut only shows when its app is installed.
-const List<({String packageName, IconData icon, String label})> kTopBarShortcuts = [
-  (packageName: 'com.android.vending', icon: Icons.shop_outlined, label: 'Play Store'),
-  (packageName: 'com.tcl.browser', icon: Icons.public, label: 'Browser'),
-  (packageName: 'org.videolan.vlc', icon: Icons.dns_outlined, label: 'Router HDD'),
+/// Apps opened from the top bar instead of the dock. Each shortcut opens the first of its
+/// packages that is installed, and is hidden when none is.
+const List<({List<String> packageNames, IconData icon, String label})> kTopBarShortcuts = [
+  (packageNames: ['com.android.vending'], icon: Icons.shop_outlined, label: 'Play Store'),
+  (packageNames: ['com.phlox.tvwebbrowser', 'com.tcl.browser'], icon: Icons.public, label: 'Browser'),
+  (packageNames: ['org.videolan.vlc'], icon: Icons.dns_outlined, label: 'Router HDD'),
 ];
 
 class _AppShortcuts extends StatelessWidget {
@@ -214,21 +215,24 @@ class _AppShortcuts extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final apps = context.select<AppsService, List<App>>(
-      (service) => kTopBarShortcuts.map((s) => service.getApplication(s.packageName)).whereType<App>().toList(),
+    final apps = context.select<AppsService, List<App?>>(
+      (service) => [
+        for (final shortcut in kTopBarShortcuts)
+          shortcut.packageNames.map(service.getApplication).firstWhereOrNull((app) => app != null),
+      ],
     );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (final shortcut in kTopBarShortcuts)
-          if (apps.firstWhereOrNull((app) => app.packageName == shortcut.packageName) case final app?)
+        for (final (index, shortcut) in kTopBarShortcuts.indexed)
+          if (apps[index] case final app?)
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: AppBarFocusRing(
-                key: Key("top_bar_shortcut_${shortcut.packageName}"),
+                key: Key("top_bar_shortcut_${app.packageName}"),
                 onPressed: () => context.read<AppsService>().launchApp(app),
                 semanticLabel: shortcut.label,
-                child: _ShortcutIcon(packageName: shortcut.packageName, fallback: shortcut.icon),
+                child: _ShortcutIcon(packageName: app.packageName, fallback: shortcut.icon),
               ),
             ),
       ],

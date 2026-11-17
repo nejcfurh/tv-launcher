@@ -143,6 +143,21 @@ void main() {
     verify(appsService.launchApp(browser));
   });
 
+  testWidgets("Browser shortcut prefers TV Bro over the TCL browser", (tester) async {
+    final appsService = mkAppService();
+    final tvBro = fakeApp(packageName: "com.phlox.tvwebbrowser", name: "TV Bro", version: "1.0.0");
+    final tclBrowser = fakeApp(packageName: "com.tcl.browser", name: "Browser", version: "1.0.0");
+    when(appsService.categoriesWithApps).thenReturn([]);
+    when(appsService.getApplication("com.phlox.tvwebbrowser")).thenReturn(tvBro);
+    when(appsService.getApplication("com.tcl.browser")).thenReturn(tclBrowser);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pump();
+
+    expect(find.byKey(const Key("top_bar_shortcut_com.phlox.tvwebbrowser")), findsOneWidget);
+    expect(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), findsNothing);
+  });
+
   testWidgets("Home page shows category empty-state", (tester) async {
     final appsService = mkAppService();
     when(appsService.categoriesWithApps).thenReturn([]);
