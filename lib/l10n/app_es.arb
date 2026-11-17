@@ -84,6 +84,10 @@
         }
     },
     "renameCategory": "Renombrar categoría",
+    "renameApp": "Renombrar",
+    "renameAppHint": "Déjalo vacío para usar el nombre de la app",
+    "cardCornerRadius": "Radio de las esquinas",
+    "appNamesOnFocusOnly": "Mostrar solo el nombre de la app seleccionada",
     "reorder": "Reordenar",
     "row": "Row",
     "rowHeight": "Row height",

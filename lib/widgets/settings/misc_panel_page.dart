@@ -50,6 +50,13 @@ class MiscPanelPage extends StatelessWidget {
                 title: Text(localizations.showAppNamesBelowIcons, style: Theme.of(context).textTheme.bodyMedium),
                 secondary: Icon(Icons.subtitles),
               ),
+              if (settingsService.showAppNamesBelowIcons)
+                RoundedSwitchListTile(
+                  value: settingsService.appNamesOnFocusOnly,
+                  onChanged: (value) => settingsService.setAppNamesOnFocusOnly(value),
+                  title: Text(localizations.appNamesOnFocusOnly, style: Theme.of(context).textTheme.bodyMedium),
+                  secondary: Icon(Icons.center_focus_strong),
+                ),
               RoundedSwitchListTile(
                 value: settingsService.showFocusBorders,
                 onChanged: (value) => settingsService.setShowFocusBorders(value),

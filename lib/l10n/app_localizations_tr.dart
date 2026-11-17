@@ -196,6 +196,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String get renameCategory => 'Kategoriyi yeniden adlandır';
 
   @override
+  String get renameApp => 'Yeniden adlandır';
+
+  @override
+  String get renameAppHint => 'Uygulamanın kendi adı için boş bırakın';
+
+  @override
+  String get cardCornerRadius => 'Kutucuk köşe yarıçapı';
+
+  @override
+  String get appNamesOnFocusOnly => 'Yalnızca seçili uygulamanın adını göster';
+
+  @override
   String get reorder => 'Yeniden sırala';
 
   @override

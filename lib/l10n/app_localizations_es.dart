@@ -198,6 +198,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get renameCategory => 'Renombrar categoría';
 
   @override
+  String get renameApp => 'Renombrar';
+
+  @override
+  String get renameAppHint => 'Déjalo vacío para usar el nombre de la app';
+
+  @override
+  String get cardCornerRadius => 'Radio de las esquinas';
+
+  @override
+  String get appNamesOnFocusOnly =>
+      'Mostrar solo el nombre de la app seleccionada';
+
+  @override
   String get reorder => 'Reordenar';
 
   @override

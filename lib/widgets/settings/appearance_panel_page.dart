@@ -59,6 +59,15 @@ class AppearancePanelPage extends StatelessWidget {
                 ),
                 onPressed: () => Navigator.of(context).pushNamed(FocusBorderThicknessPage.routeName),
               ),
+              FocusableSettingsTile(
+                leading: const Icon(Icons.rounded_corner),
+                title: Text(localizations.cardCornerRadius, style: Theme.of(context).textTheme.bodyMedium),
+                subtitle: Text(
+                  "${settingsService.cardCornerRadius.toStringAsFixed(0)} dp",
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                onPressed: settingsService.cycleCardCornerRadius,
+              ),
             ],
           ),
         ),

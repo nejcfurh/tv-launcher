@@ -458,6 +458,30 @@ abstract class AppLocalizations {
   /// **'Rename category'**
   String get renameCategory;
 
+  /// No description provided for @renameApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get renameApp;
+
+  /// No description provided for @renameAppHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty to use the app\'s own name'**
+  String get renameAppHint;
+
+  /// No description provided for @cardCornerRadius.
+  ///
+  /// In en, this message translates to:
+  /// **'Tile corner radius'**
+  String get cardCornerRadius;
+
+  /// No description provided for @appNamesOnFocusOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Show name of selected app only'**
+  String get appNamesOnFocusOnly;
+
   /// No description provided for @reorder.
   ///
   /// In en, this message translates to:

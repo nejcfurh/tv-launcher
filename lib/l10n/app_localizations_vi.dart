@@ -196,6 +196,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get renameCategory => 'Đổi tên danh mục';
 
   @override
+  String get renameApp => 'Đổi tên';
+
+  @override
+  String get renameAppHint => 'Để trống để dùng tên gốc của ứng dụng';
+
+  @override
+  String get cardCornerRadius => 'Độ bo góc ô';
+
+  @override
+  String get appNamesOnFocusOnly => 'Chỉ hiện tên ứng dụng đang chọn';
+
+  @override
   String get reorder => 'Sắp xếp lại';
 
   @override

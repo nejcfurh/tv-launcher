@@ -84,6 +84,10 @@
         }
     },
     "renameCategory": "Rename category",
+    "renameApp": "Rename",
+    "renameAppHint": "Leave empty to use the app's own name",
+    "cardCornerRadius": "Tile corner radius",
+    "appNamesOnFocusOnly": "Show name of selected app only",
     "reorder": "Reorder",
     "row": "Row",
     "rowHeight": "Row height",

@@ -537,6 +537,9 @@ SettingsService mkSettingsService() {
   when(settingsService.showDateInStatusBar).thenReturn(false);
   when(settingsService.showTimeInStatusBar).thenReturn(false);
   when(settingsService.focusBorderThickness).thenReturn(3.0);
+  when(settingsService.cardCornerRadius).thenReturn(CARD_CORNER_RADIUS_DEFAULT);
+  when(settingsService.appNamesOnFocusOnly).thenReturn(false);
+  when(settingsService.customAppLabel(any)).thenReturn(null);
   when(settingsService.screensaverClockStyle).thenReturn('minimal');
   when(settingsService.accentColorHex).thenReturn(ACCENT_COLOR_WHITE);
   return settingsService;

@@ -21,7 +21,7 @@ import 'package:flauncher/providers/settings_service.dart' as _i18;
 import 'package:flauncher/providers/wallpaper_service.dart' as _i14;
 import 'package:flauncher/providers/watch_next_service.dart' as _i20;
 import 'package:flutter/cupertino.dart' as _i10;
-import 'package:flutter/services.dart' as _i11;
+import 'package:flutter/foundation.dart' as _i11;
 import 'package:image_picker/image_picker.dart' as _i22;
 import 'package:image_picker_platform_interface/image_picker_platform_interface.dart'
     as _i5;
@@ -562,6 +562,16 @@ class MockFLauncherChannel extends _i1.Mock implements _i12.FLauncherChannel {
   _i9.Future<bool> checkMediaPermissions() => (super.noSuchMethod(
         Invocation.method(
           #checkMediaPermissions,
+          [],
+        ),
+        returnValue: _i9.Future<bool>.value(false),
+        returnValueForMissingStub: _i9.Future<bool>.value(false),
+      ) as _i9.Future<bool>);
+
+  @override
+  _i9.Future<bool> areMediaPermissionsAvailable() => (super.noSuchMethod(
+        Invocation.method(
+          #areMediaPermissionsAvailable,
           [],
         ),
         returnValue: _i9.Future<bool>.value(false),
@@ -1434,6 +1444,17 @@ class MockAppsService extends _i1.Mock implements _i16.AppsService {
       ) as _i9.Future<void>);
 
   @override
+  _i9.Future<void> deleteCategory(_i3.Category? category) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #deleteCategory,
+          [category],
+        ),
+        returnValue: _i9.Future<void>.value(),
+        returnValueForMissingStub: _i9.Future<void>.value(),
+      ) as _i9.Future<void>);
+
+  @override
   void moveSectionInMemory(
     int? oldIndex,
     int? newIndex,
@@ -1477,6 +1498,23 @@ class MockAppsService extends _i1.Mock implements _i16.AppsService {
       ) as _i9.Future<void>);
 
   @override
+  _i9.Future<void> moveCategory(
+    int? oldIndex,
+    int? newIndex,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #moveCategory,
+          [
+            oldIndex,
+            newIndex,
+          ],
+        ),
+        returnValue: _i9.Future<void>.value(),
+        returnValueForMissingStub: _i9.Future<void>.value(),
+      ) as _i9.Future<void>);
+
+  @override
   _i9.Future<void> hideApplication(_i17.App? application) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1492,6 +1530,17 @@ class MockAppsService extends _i1.Mock implements _i16.AppsService {
       (super.noSuchMethod(
         Invocation.method(
           #showApplication,
+          [application],
+        ),
+        returnValue: _i9.Future<void>.value(),
+        returnValueForMissingStub: _i9.Future<void>.value(),
+      ) as _i9.Future<void>);
+
+  @override
+  _i9.Future<void> unHideApplication(_i17.App? application) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #unHideApplication,
           [application],
         ),
         returnValue: _i9.Future<void>.value(),
@@ -1819,6 +1868,20 @@ class MockSettingsService extends _i1.Mock implements _i18.SettingsService {
       ) as double);
 
   @override
+  double get cardCornerRadius => (super.noSuchMethod(
+        Invocation.getter(#cardCornerRadius),
+        returnValue: 0.0,
+        returnValueForMissingStub: 0.0,
+      ) as double);
+
+  @override
+  bool get appNamesOnFocusOnly => (super.noSuchMethod(
+        Invocation.getter(#appNamesOnFocusOnly),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
   _i4.Color get accentColor => (super.noSuchMethod(
         Invocation.getter(#accentColor),
         returnValue: _FakeColor_2(
@@ -1959,6 +2022,62 @@ class MockSettingsService extends _i1.Mock implements _i18.SettingsService {
         Invocation.method(
           #setFocusBorderThickness,
           [value],
+        ),
+        returnValue: _i9.Future<void>.value(),
+        returnValueForMissingStub: _i9.Future<void>.value(),
+      ) as _i9.Future<void>);
+
+  @override
+  _i9.Future<void> setCardCornerRadius(double? value) => (super.noSuchMethod(
+        Invocation.method(
+          #setCardCornerRadius,
+          [value],
+        ),
+        returnValue: _i9.Future<void>.value(),
+        returnValueForMissingStub: _i9.Future<void>.value(),
+      ) as _i9.Future<void>);
+
+  @override
+  _i9.Future<void> cycleCardCornerRadius() => (super.noSuchMethod(
+        Invocation.method(
+          #cycleCardCornerRadius,
+          [],
+        ),
+        returnValue: _i9.Future<void>.value(),
+        returnValueForMissingStub: _i9.Future<void>.value(),
+      ) as _i9.Future<void>);
+
+  @override
+  _i9.Future<void> setAppNamesOnFocusOnly(bool? value) => (super.noSuchMethod(
+        Invocation.method(
+          #setAppNamesOnFocusOnly,
+          [value],
+        ),
+        returnValue: _i9.Future<void>.value(),
+        returnValueForMissingStub: _i9.Future<void>.value(),
+      ) as _i9.Future<void>);
+
+  @override
+  String? customAppLabel(String? packageName) => (super.noSuchMethod(
+        Invocation.method(
+          #customAppLabel,
+          [packageName],
+        ),
+        returnValueForMissingStub: null,
+      ) as String?);
+
+  @override
+  _i9.Future<void> setCustomAppLabel(
+    String? packageName,
+    String? label,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #setCustomAppLabel,
+          [
+            packageName,
+            label,
+          ],
         ),
         returnValue: _i9.Future<void>.value(),
         returnValueForMissingStub: _i9.Future<void>.value(),

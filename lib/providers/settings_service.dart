@@ -55,6 +55,12 @@ const String _dockDarkBackground = "dock_dark_background";
 const String _dockShadowEnabled = "dock_shadow_enabled";
 const String _showFocusBorders = "show_focus_borders";
 const String _focusBorderThickness = "focus_border_thickness";
+const String _cardCornerRadius = "card_corner_radius";
+const String _appNamesOnFocusOnly = "app_names_on_focus_only";
+const String _customAppLabelPrefix = "custom_app_label:";
+
+const double CARD_CORNER_RADIUS_DEFAULT = 12.0;
+const List<double> CARD_CORNER_RADIUS_OPTIONS = [6.0, 12.0, 20.0, 28.0];
 
 // Focus border thickness options (in dp)
 const double FOCUS_BORDER_THIN = 1.0;
@@ -154,6 +160,38 @@ class SettingsService extends ChangeNotifier {
 
   Future<void> setFocusBorderThickness(double value) async {
     await _sharedPreferences.setDouble(_focusBorderThickness, value);
+    notifyListeners();
+  }
+
+  double get cardCornerRadius => _sharedPreferences.getDouble(_cardCornerRadius) ?? CARD_CORNER_RADIUS_DEFAULT;
+
+  Future<void> setCardCornerRadius(double value) async {
+    await _sharedPreferences.setDouble(_cardCornerRadius, value);
+    notifyListeners();
+  }
+
+  /// Steps to the next radius option, wrapping after the largest.
+  Future<void> cycleCardCornerRadius() {
+    final current = CARD_CORNER_RADIUS_OPTIONS.indexWhere((r) => (r - cardCornerRadius).abs() < 0.05);
+    final next = CARD_CORNER_RADIUS_OPTIONS[(current + 1) % CARD_CORNER_RADIUS_OPTIONS.length];
+    return setCardCornerRadius(next);
+  }
+
+  bool get appNamesOnFocusOnly => _sharedPreferences.getBool(_appNamesOnFocusOnly) ?? true;
+
+  Future<void> setAppNamesOnFocusOnly(bool value) => set(_appNamesOnFocusOnly, value);
+
+  String? customAppLabel(String packageName) => _sharedPreferences.getString("$_customAppLabelPrefix$packageName");
+
+  /// An empty or blank [label] removes the custom label.
+  Future<void> setCustomAppLabel(String packageName, String label) async {
+    final key = "$_customAppLabelPrefix$packageName";
+    final trimmed = label.trim();
+    if (trimmed.isEmpty) {
+      await _sharedPreferences.remove(key);
+    } else {
+      await _sharedPreferences.setString(key, trimmed);
+    }
     notifyListeners();
   }
 

@@ -194,6 +194,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get renameCategory => '重命名分类';
 
   @override
+  String get renameApp => '重命名';
+
+  @override
+  String get renameAppHint => '留空则使用应用自身名称';
+
+  @override
+  String get cardCornerRadius => '磁贴圆角半径';
+
+  @override
+  String get appNamesOnFocusOnly => '仅显示所选应用的名称';
+
+  @override
   String get reorder => '重新排序';
 
   @override

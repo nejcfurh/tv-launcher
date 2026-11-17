@@ -195,6 +195,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get renameCategory => 'Rename category';
 
   @override
+  String get renameApp => 'Rename';
+
+  @override
+  String get renameAppHint => 'Leave empty to use the app\'s own name';
+
+  @override
+  String get cardCornerRadius => 'Tile corner radius';
+
+  @override
+  String get appNamesOnFocusOnly => 'Show name of selected app only';
+
+  @override
   String get reorder => 'Reorder';
 
   @override
