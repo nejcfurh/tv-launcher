@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:collection/collection.dart';
 import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flutter/material.dart';
@@ -226,15 +228,55 @@ class _AppShortcuts extends StatelessWidget {
                 key: Key("top_bar_shortcut_${shortcut.packageName}"),
                 onPressed: () => context.read<AppsService>().launchApp(app),
                 semanticLabel: shortcut.label,
-                child: Icon(
-                  shortcut.icon,
-                  size: 20,
-                  color: Colors.white,
-                  shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
-                ),
+                child: _ShortcutIcon(packageName: shortcut.packageName, fallback: shortcut.icon),
               ),
             ),
       ],
+    );
+  }
+}
+
+/// The app's own launcher icon, or [fallback] while it loads or when the app has none.
+class _ShortcutIcon extends StatefulWidget {
+  final String packageName;
+  final IconData fallback;
+
+  const _ShortcutIcon({required this.packageName, required this.fallback});
+
+  @override
+  State<_ShortcutIcon> createState() => _ShortcutIconState();
+}
+
+class _ShortcutIconState extends State<_ShortcutIcon> {
+  static const double _size = 24;
+  late final Future<Uint8List> _icon = context.read<AppsService>().getAppIcon(widget.packageName);
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = Icon(
+      widget.fallback,
+      size: 20,
+      color: Colors.white,
+      shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
+    );
+    return SizedBox.square(
+      dimension: _size,
+      child: FutureBuilder<Uint8List>(
+        future: _icon,
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes == null || bytes.isEmpty) {
+            return Center(child: fallback);
+          }
+          return Image.memory(
+            bytes,
+            width: _size,
+            height: _size,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (_, __, ___) => Center(child: fallback),
+          );
+        },
+      ),
     );
   }
 }

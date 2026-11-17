@@ -133,6 +133,10 @@ void main() {
 
     expect(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), findsOneWidget);
     expect(find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), findsNothing);
+    expect(
+      find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), matching: find.byType(Image)),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")));
     await tester.pump();
