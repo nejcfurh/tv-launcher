@@ -8,6 +8,10 @@ The goal is a quiet home screen: one row of the apps you actually use, a full-sc
 "Watch Next" banner above it, and nothing else. No ads, no recommendations rows, no
 store tiles.
 
+![TV Launcher home screen: top bar with settings, Wi-Fi, Play Store, browser and VLC shortcuts, the date and time, an Unsplash wallpaper, and a dock of eight apps at the bottom](docs/images/tv-launcher-home.jpg)
+
+<sub>Home screen with the Watch Next banner turned off, on an Unsplash wallpaper.</sub>
+
 > TV Launcher is a fork. Almost everything that makes it work — the Watch Next
 > integration, the dock, wallpapers, settings and the overall architecture — comes from
 > Arc Launcher and the projects it is based on. See [Credits](#credits).
@@ -84,6 +88,25 @@ keyPassword=...
 
 Keep the keystore safe: Android only installs an update over an existing install if
 it is signed with the same key.
+
+### Personal build switches
+
+Optional switches can go in a git-ignored `dart_defines.local.json` in the project
+root and are passed at build time:
+
+```json
+{
+  "HIDE_UNSPLASH_CREDIT": true
+}
+```
+
+```bash
+flutter build apk --release --flavor github --split-per-abi --dart-define-from-file=dart_defines.local.json
+```
+
+| Switch | Default | Effect |
+| --- | --- | --- |
+| `HIDE_UNSPLASH_CREDIT` | `false` | Hides the "Photo: … / Unsplash" credit on the wallpaper. Unsplash's API terms require the credit, so only use this for a build that stays on your own TV. |
 
 ## Installing and setting as Home
 
@@ -170,5 +193,7 @@ TV Launcher stands on a chain of open-source launchers:
 
 The HBO, YouTube and Apple TV logo shapes come from [Simple Icons](https://simpleicons.org)
 (CC0). The VLC cone in the top bar is based on Simple Icons' VLC shape.
+
+Wallpaper in the screenshot: photo by Ganapathy Kumar on [Unsplash](https://unsplash.com).
 
 TV Launcher changes by [Nejc Furh](https://nejcfurh.dev).

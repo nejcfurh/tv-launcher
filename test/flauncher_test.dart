@@ -19,6 +19,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flauncher/build_flags.dart';
 import 'package:flauncher/database.dart';
 import 'package:flauncher/flauncher.dart';
 import 'package:flauncher/flauncher_channel.dart';
@@ -210,6 +211,19 @@ void main() {
     await _pumpWidgetWithProviders(tester, mkWallpaperService(false), appsService, mkSettingsService());
 
     expect(find.byKey(Key("background")), findsOneWidget);
+  });
+
+  testWidgets("Default build credits the Unsplash photographer", (tester) async {
+    final appsService = mkAppService();
+    when(appsService.categoriesWithApps).thenReturn([]);
+    final wallpaperService = mkWallpaperService();
+    when(wallpaperService.slideshowAuthor).thenReturn("Jane Doe");
+
+    await _pumpWidgetWithProviders(tester, wallpaperService, appsService, mkSettingsService());
+
+    // Only builds made with HIDE_UNSPLASH_CREDIT=true leave the credit out.
+    expect(kHideUnsplashCredit, isFalse);
+    expect(find.text("Photo: Jane Doe / Unsplash"), findsOneWidget);
   });
 
   testWidgets("Home page builds the blur layer when background blur is enabled", (tester) async {

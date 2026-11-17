@@ -22,6 +22,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:collection/collection.dart';
+import 'package:flauncher/build_flags.dart';
 import 'package:flauncher/actions.dart';
 import 'package:flauncher/custom_traversal_policy.dart';
 import 'package:flauncher/flauncher_channel.dart';
@@ -180,7 +181,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                           ),
                         ),
                       )
-                    else if (author != null && !hasHeroBackdrop)
+                    else if (author != null && !hasHeroBackdrop && !kHideUnsplashCredit)
                       Positioned(
                         right: 24,
                         top: 64,
