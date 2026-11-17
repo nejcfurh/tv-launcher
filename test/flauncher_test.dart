@@ -122,6 +122,23 @@ void main() {
     expect(tester.getBottomLeft(find.byType(CategoryCleanRow)).dy, moreOrLessEquals(screenHeight - 29, epsilon: 1.5));
   });
 
+  testWidgets("Top bar shows shortcuts for installed apps and launches them", (tester) async {
+    final appsService = mkAppService();
+    final browser = fakeApp(packageName: "com.tcl.browser", name: "Browser", version: "1.0.0");
+    when(appsService.categoriesWithApps).thenReturn([]);
+    when(appsService.getApplication("com.tcl.browser")).thenReturn(browser);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pump();
+
+    expect(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), findsOneWidget);
+    expect(find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), findsNothing);
+
+    await tester.tap(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")));
+    await tester.pump();
+    verify(appsService.launchApp(browser));
+  });
+
   testWidgets("Home page shows category empty-state", (tester) async {
     final appsService = mkAppService();
     when(appsService.categoriesWithApps).thenReturn([]);

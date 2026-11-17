@@ -1,7 +1,10 @@
+import 'package:collection/collection.dart';
 import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/app.dart';
+import '../providers/apps_service.dart';
 import '../providers/launcher_state.dart';
 import '../providers/network_service.dart';
 import '../providers/settings_service.dart';
@@ -133,6 +136,7 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                   ? const DailyWifiUsageWidget()
                   : const SizedBox.shrink(),
               ),
+              const _AppShortcuts(),
             ],
           ),
           // Right side: Date/Time only
@@ -196,3 +200,41 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
   }
 }
 
+/// Apps opened from the top bar instead of the dock. A shortcut only shows when its app is installed.
+const List<({String packageName, IconData icon, String label})> kTopBarShortcuts = [
+  (packageName: 'com.android.vending', icon: Icons.shop_outlined, label: 'Play Store'),
+  (packageName: 'com.tcl.browser', icon: Icons.public, label: 'Browser'),
+  (packageName: 'org.videolan.vlc', icon: Icons.dns_outlined, label: 'Router HDD'),
+];
+
+class _AppShortcuts extends StatelessWidget {
+  const _AppShortcuts();
+
+  @override
+  Widget build(BuildContext context) {
+    final apps = context.select<AppsService, List<App>>(
+      (service) => kTopBarShortcuts.map((s) => service.getApplication(s.packageName)).whereType<App>().toList(),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final shortcut in kTopBarShortcuts)
+          if (apps.firstWhereOrNull((app) => app.packageName == shortcut.packageName) case final app?)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: AppBarFocusRing(
+                key: Key("top_bar_shortcut_${shortcut.packageName}"),
+                onPressed: () => context.read<AppsService>().launchApp(app),
+                semanticLabel: shortcut.label,
+                child: Icon(
+                  shortcut.icon,
+                  size: 20,
+                  color: Colors.white,
+                  shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
+                ),
+              ),
+            ),
+      ],
+    );
+  }
+}
