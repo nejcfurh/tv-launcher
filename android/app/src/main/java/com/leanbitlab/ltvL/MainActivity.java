@@ -364,14 +364,15 @@ public class MainActivity extends FlutterActivity {
 
     /**
      * The app icon without its background: the foreground layer of an adaptive icon, trimmed to
-     * the logo itself. Icons that are not adaptive are returned whole.
+     * the logo itself. Icons that are not adaptive have no separate background, so this returns
+     * nothing for them and the caller shows the app name instead.
      */
     private byte[] getApplicationIconForeground(String packageName) {
         PackageManager packageManager = getPackageManager();
         try {
             Drawable drawable = packageManager.getApplicationInfo(packageName, 0).loadIcon(packageManager);
             if (!(drawable instanceof AdaptiveIconDrawable adaptive) || adaptive.getForeground() == null) {
-                return drawable != null ? drawableToByteArray(drawable) : new byte[0];
+                return new byte[0];
             }
             final int size = 432;
             Bitmap layer = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
