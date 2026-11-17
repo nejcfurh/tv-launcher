@@ -203,12 +203,20 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
 }
 
 /// Apps opened from the top bar instead of the dock. Each shortcut opens the first of its
-/// packages that is installed, and is hidden when none is.
-const List<({List<String> packageNames, IconData icon, String label})> kTopBarShortcuts = [
-  (packageNames: ['com.android.vending'], icon: Icons.shop_outlined, label: 'Play Store'),
-  (packageNames: ['com.phlox.tvwebbrowser', 'com.tcl.browser'], icon: Icons.public, label: 'Browser'),
-  (packageNames: ['org.videolan.vlc'], icon: Icons.dns_outlined, label: 'Router HDD'),
+/// packages that is installed, and is hidden when none is. With [useAppIcon] it shows the
+/// app's own icon, otherwise [icon] in the style of the settings and network icons.
+const List<({List<String> packageNames, IconData icon, bool useAppIcon, String label})> kTopBarShortcuts = [
+  (packageNames: ['com.android.vending'], icon: Icons.shop_outlined, useAppIcon: true, label: 'Play Store'),
+  (packageNames: ['com.phlox.tvwebbrowser', 'com.tcl.browser'], icon: Icons.public, useAppIcon: false, label: 'Browser'),
+  (packageNames: ['org.videolan.vlc'], icon: Icons.dns_outlined, useAppIcon: true, label: 'Router HDD'),
 ];
+
+Widget _barIcon(IconData icon) => Icon(
+      icon,
+      size: 20,
+      color: Colors.white,
+      shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
+    );
 
 class _AppShortcuts extends StatelessWidget {
   const _AppShortcuts();
@@ -232,7 +240,9 @@ class _AppShortcuts extends StatelessWidget {
                 key: Key("top_bar_shortcut_${app.packageName}"),
                 onPressed: () => context.read<AppsService>().launchApp(app),
                 semanticLabel: shortcut.label,
-                child: _ShortcutIcon(packageName: app.packageName, fallback: shortcut.icon),
+                child: shortcut.useAppIcon
+                    ? _ShortcutIcon(packageName: app.packageName, fallback: shortcut.icon)
+                    : _barIcon(shortcut.icon),
               ),
             ),
       ],
@@ -257,12 +267,7 @@ class _ShortcutIconState extends State<_ShortcutIcon> {
 
   @override
   Widget build(BuildContext context) {
-    final fallback = Icon(
-      widget.fallback,
-      size: 20,
-      color: Colors.white,
-      shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
-    );
+    final fallback = _barIcon(widget.fallback);
     return SizedBox.square(
       dimension: _size,
       child: FutureBuilder<Uint8List>(

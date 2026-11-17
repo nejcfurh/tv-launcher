@@ -125,16 +125,23 @@ void main() {
   testWidgets("Top bar shows shortcuts for installed apps and launches them", (tester) async {
     final appsService = mkAppService();
     final browser = fakeApp(packageName: "com.tcl.browser", name: "Browser", version: "1.0.0");
+    final playStore = fakeApp(packageName: "com.android.vending", name: "Play Store", version: "1.0.0");
     when(appsService.categoriesWithApps).thenReturn([]);
     when(appsService.getApplication("com.tcl.browser")).thenReturn(browser);
+    when(appsService.getApplication("com.android.vending")).thenReturn(playStore);
 
     await _pumpWidgetWith(tester, appsService);
     await tester.pump();
 
     expect(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), findsOneWidget);
     expect(find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), findsNothing);
+    // Play Store shows its own icon; the browser shows a globe whichever browser is installed.
     expect(
-      find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), matching: find.byType(Image)),
+      find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.android.vending")), matching: find.byType(Image)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), matching: find.byIcon(Icons.public)),
       findsOneWidget,
     );
 
