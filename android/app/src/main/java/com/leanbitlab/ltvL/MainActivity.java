@@ -24,6 +24,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.*;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.ConnectivityManager;
@@ -105,6 +106,7 @@ public class MainActivity extends FlutterActivity {
                 case "getApplications" -> result.success(getApplications());
                 case "getApplicationBanner" -> result.success(getApplicationBanner(call.arguments()));
                 case "getApplicationIcon" -> result.success(getApplicationIcon(call.arguments()));
+                case "getApplicationIconForeground" -> result.success(getApplicationIconForeground(call.arguments()));
                 case "applicationExists" -> result.success(applicationExists(call.arguments()));
                 case "launchActivityFromAction" -> result.success(launchActivityFromAction(call.arguments()));
                 case "launchApp" -> result.success(launchApp(call.arguments()));
@@ -358,6 +360,33 @@ public class MainActivity extends FlutterActivity {
         }
 
         return imageBytes;
+    }
+
+    /**
+     * The app icon without its background: the foreground layer of an adaptive icon, cropped to
+     * the part a launcher shows. Icons that are not adaptive are returned whole.
+     */
+    private byte[] getApplicationIconForeground(String packageName) {
+        PackageManager packageManager = getPackageManager();
+        try {
+            Drawable drawable = packageManager.getApplicationInfo(packageName, 0).loadIcon(packageManager);
+            if (!(drawable instanceof AdaptiveIconDrawable adaptive) || adaptive.getForeground() == null) {
+                return drawable != null ? drawableToByteArray(drawable) : new byte[0];
+            }
+            // Adaptive layers are 108dp; launchers show the centre 72dp, so crop to that.
+            final int size = 216;
+            Bitmap layer = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Drawable foreground = adaptive.getForeground();
+            foreground.setBounds(0, 0, size, size);
+            foreground.draw(new Canvas(layer));
+            int inset = size / 6;
+            Bitmap visible = Bitmap.createBitmap(layer, inset, inset, size - 2 * inset, size - 2 * inset);
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            visible.compress(Bitmap.CompressFormat.PNG, 100, stream);
+            return stream.toByteArray();
+        } catch (PackageManager.NameNotFoundException ignored) {
+            return new byte[0];
+        }
     }
 
     private boolean applicationExists(String packageName) {

@@ -53,6 +53,11 @@ class FLauncherChannel {
     return bytes;
   }
 
+  Future<Uint8List> getApplicationIconForeground(String packageName) async {
+    Uint8List bytes = await _methodChannel.invokeMethod("getApplicationIconForeground", packageName);
+    return bytes;
+  }
+
   Future<bool> applicationExists(String packageName) async =>
       await _methodChannel.invokeMethod('applicationExists', packageName);
 

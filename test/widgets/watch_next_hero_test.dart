@@ -118,9 +118,26 @@ class TestAppsService extends ChangeNotifier implements AppsService {
     return null;
   }
 
+  final List<String> foregroundIconRequests = [];
+
+  @override
+  Future<Uint8List> getAppIconForeground(String packageName) async {
+    foregroundIconRequests.add(packageName);
+    return _onePixelPng;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
+final Uint8List _onePixelPng = Uint8List.fromList([
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
+  0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+  0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+]);
 
 void main() {
   group('WatchNextHero', () {
@@ -190,6 +207,15 @@ void main() {
       expect(find.textContaining('NETFLIX'), findsOneWidget);
       expect(find.text('Resume'), findsOneWidget);
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+    });
+
+    testWidgets('badge shows the source app icon next to its name', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(appsService.foregroundIconRequests, contains('com.netflix.ninja'));
+      final badgeRow = find.ancestor(of: find.textContaining('NETFLIX'), matching: find.byType(Row)).first;
+      expect(find.descendant(of: badgeRow, matching: find.byType(Image)), findsOneWidget);
     });
 
     testWidgets('clicking watch button triggers launchItem', (tester) async {

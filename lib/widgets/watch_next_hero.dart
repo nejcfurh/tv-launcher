@@ -81,6 +81,7 @@ class WatchNextHero extends StatelessWidget {
         children: [
           _HeroInfo(
             sourceBadge: sourceBadge,
+            sourcePackageName: app?.packageName,
             title: activeItem.title,
             description: activeItem.description?.trim(),
             progressPercent: activeItem.progressPercent,
@@ -116,12 +117,14 @@ class WatchNextHero extends StatelessWidget {
 
 class _HeroInfo extends StatelessWidget {
   final String sourceBadge;
+  final String? sourcePackageName;
   final String title;
   final String? description;
   final int? progressPercent;
 
   const _HeroInfo({
     required this.sourceBadge,
+    this.sourcePackageName,
     required this.title,
     required this.description,
     required this.progressPercent,
@@ -144,11 +147,22 @@ class _HeroInfo extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
           ),
-          child: Text(
-            sourceBadge,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (sourcePackageName != null) ...[
+                _SourceAppIcon(packageName: sourcePackageName!),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Text(
+                  sourceBadge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 10),
@@ -399,6 +413,60 @@ class _HeroPaginationIndicator extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+}
+
+/// The source app's icon without its background, sized to the badge text. Empty until loaded.
+class _SourceAppIcon extends StatefulWidget {
+  final String packageName;
+
+  const _SourceAppIcon({required this.packageName});
+
+  @override
+  State<_SourceAppIcon> createState() => _SourceAppIconState();
+}
+
+class _SourceAppIconState extends State<_SourceAppIcon> {
+  static const double _size = 16;
+  late Future<Uint8List> _icon;
+
+  @override
+  void initState() {
+    super.initState();
+    _icon = context.read<AppsService>().getAppIconForeground(widget.packageName);
+  }
+
+  @override
+  void didUpdateWidget(_SourceAppIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.packageName != widget.packageName) {
+      _icon = context.read<AppsService>().getAppIconForeground(widget.packageName);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox.square(
+      dimension: _size,
+      child: FutureBuilder<Uint8List>(
+        future: _icon,
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes == null || bytes.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Image.memory(
+            bytes,
+            key: ValueKey(widget.packageName),
+            width: _size,
+            height: _size,
+            filterQuality: FilterQuality.medium,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          );
+        },
+      ),
     );
   }
 }
