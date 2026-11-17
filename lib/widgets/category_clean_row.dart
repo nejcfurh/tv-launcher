@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import 'dart:math';
+
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/widgets/app_card.dart';
@@ -54,12 +56,14 @@ class CategoryCleanRow extends StatelessWidget
     else {
       categoryContent = LayoutBuilder(
         builder: (context, constraints) {
-          final rowHeight = appCardRowExtentFromContentWidth(constraints.maxWidth)
+          // Grow past the default slot count so no app in the row is dropped.
+          final slotCount = max(Category.ColumnsCount, applications.length);
+          final rowHeight = appCardRowExtentFromContentWidth(constraints.maxWidth, columnCount: slotCount)
               + (showAppNames ? kAppNameLabelHeight : 0);
           return SizedBox(
             height: rowHeight,
             child: Row(
-              children: List.generate(Category.ColumnsCount, (index) {
+              children: List.generate(slotCount, (index) {
                 if (index < applications.length) {
                   return Expanded(
                     child: Padding(

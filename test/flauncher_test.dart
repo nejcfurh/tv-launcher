@@ -87,6 +87,23 @@ void main() {
     expect(findAppCard("me.efesser.flauncher.1"), findsOneWidget);
   });
 
+  testWidgets("Dock shows every favorite when there are more than six", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = List.generate(
+      8,
+      (i) => fakeApp(packageName: "me.efesser.flauncher.$i", name: "FLauncher $i", version: "1.0.0"),
+    );
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    for (final app in favorites) {
+      expect(findAppCard(app.packageName), findsOneWidget);
+    }
+  });
+
   testWidgets("Home page shows category empty-state", (tester) async {
     final appsService = mkAppService();
     when(appsService.categoriesWithApps).thenReturn([]);
