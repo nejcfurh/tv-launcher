@@ -9,7 +9,10 @@ class AppLocalizationsTr extends AppLocalizations {
   AppLocalizationsTr([String locale = 'tr']) : super(locale);
 
   @override
-  String get aboutFlauncher => 'Arc Launcher Hakkında';
+  String get aboutFlauncher => 'Hakkında';
+
+  @override
+  String get createdBy => 'Oluşturan';
 
   @override
   String get addCategory => 'Kategori ekle';
@@ -196,6 +199,18 @@ class AppLocalizationsTr extends AppLocalizations {
   String get renameCategory => 'Kategoriyi yeniden adlandır';
 
   @override
+  String get renameApp => 'Yeniden adlandır';
+
+  @override
+  String get renameAppHint => 'Uygulamanın kendi adı için boş bırakın';
+
+  @override
+  String get cardCornerRadius => 'Kutucuk köşe yarıçapı';
+
+  @override
+  String get appNamesOnFocusOnly => 'Yalnızca seçili uygulamanın adını göster';
+
+  @override
   String get reorder => 'Yeniden sırala';
 
   @override
@@ -376,6 +391,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get watchNextSectionTitle => 'Sıradaki İzlenecek';
+
+  @override
+  String get watchNextOn => 'Sıradaki İzlenecek:';
 
   @override
   String get showWatchNextSection => 'Sıradaki İzlenecek Bölümünü Göster';

@@ -1,7 +1,12 @@
+import 'dart:typed_data';
+
+import 'package:collection/collection.dart';
 import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/app.dart';
+import '../providers/apps_service.dart';
 import '../providers/launcher_state.dart';
 import '../providers/network_service.dart';
 import '../providers/settings_service.dart';
@@ -133,6 +138,7 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                   ? const DailyWifiUsageWidget()
                   : const SizedBox.shrink(),
               ),
+              const _AppShortcuts(),
             ],
           ),
           // Right side: Date/Time only
@@ -196,3 +202,107 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
   }
 }
 
+/// Apps opened from the top bar instead of the dock. Each shortcut opens the first of its
+/// packages that is installed, and is hidden when none is. It shows [asset] when set, else the
+/// app's own icon with [useAppIcon], else [icon] in the style of the settings and network icons.
+const List<({List<String> packageNames, IconData icon, bool useAppIcon, String? asset, String label})>
+    kTopBarShortcuts = [
+  (packageNames: ['com.android.vending'], icon: Icons.shop_outlined, useAppIcon: true, asset: null, label: 'Play Store'),
+  (
+    packageNames: ['com.phlox.tvwebbrowser', 'com.tcl.browser'],
+    icon: Icons.public,
+    useAppIcon: false,
+    asset: null,
+    label: 'Browser',
+  ),
+  // VLC's own icon is the cone on an orange square; the bare cone matches the other top bar icons.
+  (packageNames: ['org.videolan.vlc'], icon: Icons.dns_outlined, useAppIcon: false, asset: 'assets/vlc_cone.png', label: 'Router HDD'),
+];
+
+Widget _barIcon(IconData icon) => Icon(
+      icon,
+      size: 20,
+      color: Colors.white,
+      shadows: const [Shadow(color: Colors.black54, blurRadius: 8, offset: Offset(0, 2))],
+    );
+
+Widget _shortcutIcon(({List<String> packageNames, IconData icon, bool useAppIcon, String? asset, String label}) shortcut, App app) {
+  final asset = shortcut.asset;
+  if (asset != null) {
+    return Image.asset(asset, width: 24, height: 24, filterQuality: FilterQuality.medium);
+  }
+  if (shortcut.useAppIcon) {
+    return _ShortcutIcon(packageName: app.packageName, fallback: shortcut.icon);
+  }
+  return _barIcon(shortcut.icon);
+}
+
+class _AppShortcuts extends StatelessWidget {
+  const _AppShortcuts();
+
+  @override
+  Widget build(BuildContext context) {
+    final apps = context.select<AppsService, List<App?>>(
+      (service) => [
+        for (final shortcut in kTopBarShortcuts)
+          shortcut.packageNames.map(service.getApplication).firstWhereOrNull((app) => app != null),
+      ],
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final (index, shortcut) in kTopBarShortcuts.indexed)
+          if (apps[index] case final app?)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: AppBarFocusRing(
+                key: Key("top_bar_shortcut_${app.packageName}"),
+                onPressed: () => context.read<AppsService>().launchApp(app),
+                semanticLabel: shortcut.label,
+                child: _shortcutIcon(shortcut, app),
+              ),
+            ),
+      ],
+    );
+  }
+}
+
+/// The app's own launcher icon, or [fallback] while it loads or when the app has none.
+class _ShortcutIcon extends StatefulWidget {
+  final String packageName;
+  final IconData fallback;
+
+  const _ShortcutIcon({required this.packageName, required this.fallback});
+
+  @override
+  State<_ShortcutIcon> createState() => _ShortcutIconState();
+}
+
+class _ShortcutIconState extends State<_ShortcutIcon> {
+  static const double _size = 24;
+  late final Future<Uint8List> _icon = context.read<AppsService>().getAppIcon(widget.packageName);
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = _barIcon(widget.fallback);
+    return SizedBox.square(
+      dimension: _size,
+      child: FutureBuilder<Uint8List>(
+        future: _icon,
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes == null || bytes.isEmpty) {
+            return Center(child: fallback);
+          }
+          return Image.memory(
+            bytes,
+            width: _size,
+            height: _size,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (_, __, ___) => Center(child: fallback),
+          );
+        },
+      ),
+    );
+  }
+}

@@ -33,6 +33,7 @@ import 'package:flauncher/providers/watch_next_service.dart';
 import 'package:flauncher/widgets/application_info_panel.dart';
 import 'package:flauncher/widgets/apps_grid.dart';
 import 'package:flauncher/widgets/cached_blur_backdrop.dart';
+import 'package:flauncher/widgets/category_clean_row.dart';
 import 'package:flauncher/widgets/category_row.dart';
 import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flauncher/widgets/settings/settings_panel_page.dart';
@@ -85,6 +86,102 @@ void main() {
     expect(find.byType(SliverGrid), findsOneWidget);
     expect(findAppCard("me.efesser.flauncher.2"), findsOneWidget);
     expect(findAppCard("me.efesser.flauncher.1"), findsOneWidget);
+  });
+
+  testWidgets("Dock shows every favorite when there are more than six", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = List.generate(
+      8,
+      (i) => fakeApp(packageName: "me.efesser.flauncher.$i", name: "FLauncher $i", version: "1.0.0"),
+    );
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    for (final app in favorites) {
+      expect(findAppCard(app.packageName), findsOneWidget);
+    }
+  });
+
+  testWidgets("Dock sits at the bottom of the screen", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = List.generate(
+      8,
+      (i) => fakeApp(packageName: "me.efesser.flauncher.$i", name: "FLauncher $i", version: "1.0.0"),
+    );
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    // Bottom margin (8) + dock outer padding (16) + dock inner padding (5).
+    expect(tester.getBottomLeft(find.byType(CategoryCleanRow)).dy, moreOrLessEquals(screenHeight - 29, epsilon: 1.5));
+  });
+
+  testWidgets("Top bar shows shortcuts for installed apps and launches them", (tester) async {
+    final appsService = mkAppService();
+    final browser = fakeApp(packageName: "com.tcl.browser", name: "Browser", version: "1.0.0");
+    final playStore = fakeApp(packageName: "com.android.vending", name: "Play Store", version: "1.0.0");
+    when(appsService.categoriesWithApps).thenReturn([]);
+    when(appsService.getApplication("com.tcl.browser")).thenReturn(browser);
+    when(appsService.getApplication("com.android.vending")).thenReturn(playStore);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pump();
+
+    expect(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), findsOneWidget);
+    expect(find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), findsNothing);
+    // Play Store shows its own icon; the browser shows a globe whichever browser is installed.
+    expect(
+      find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.android.vending")), matching: find.byType(Image)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), matching: find.byIcon(Icons.public)),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")));
+    await tester.pump();
+    verify(appsService.launchApp(browser));
+  });
+
+  testWidgets("Router HDD shortcut shows the bare VLC cone", (tester) async {
+    final appsService = mkAppService();
+    final vlc = fakeApp(packageName: "org.videolan.vlc", name: "VLC", version: "1.0.0");
+    when(appsService.categoriesWithApps).thenReturn([]);
+    when(appsService.getApplication("org.videolan.vlc")).thenReturn(vlc);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")),
+        matching: find.byWidgetPredicate(
+            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/vlc_cone.png'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets("Browser shortcut prefers TV Bro over the TCL browser", (tester) async {
+    final appsService = mkAppService();
+    final tvBro = fakeApp(packageName: "com.phlox.tvwebbrowser", name: "TV Bro", version: "1.0.0");
+    final tclBrowser = fakeApp(packageName: "com.tcl.browser", name: "Browser", version: "1.0.0");
+    when(appsService.categoriesWithApps).thenReturn([]);
+    when(appsService.getApplication("com.phlox.tvwebbrowser")).thenReturn(tvBro);
+    when(appsService.getApplication("com.tcl.browser")).thenReturn(tclBrowser);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pump();
+
+    expect(find.byKey(const Key("top_bar_shortcut_com.phlox.tvwebbrowser")), findsOneWidget);
+    expect(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), findsNothing);
   });
 
   testWidgets("Home page shows category empty-state", (tester) async {
@@ -190,6 +287,22 @@ void main() {
     await tester.pump(const Duration(milliseconds: 550));
 
     verify(appsService.launchApp(app));
+  });
+
+  testWidgets("Pressing select launches the app without waiting for the press animation", (tester) async {
+    final appsService = mkAppService();
+    final app = fakeApp(packageName: "me.efesser.flauncher", name: "FLauncher", version: "1.0.0");
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(fakeCategory(name: "Favorites", order: 0), [app]),
+    ]);
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    verify(appsService.launchApp(app));
+
+    // Let the reset timer finish so the test ends with no pending timers.
+    await tester.pump(const Duration(milliseconds: 700));
   });
 
   testWidgets("Long pressing on app opens ApplicationInfoPanel", (tester) async {
@@ -537,6 +650,9 @@ SettingsService mkSettingsService() {
   when(settingsService.showDateInStatusBar).thenReturn(false);
   when(settingsService.showTimeInStatusBar).thenReturn(false);
   when(settingsService.focusBorderThickness).thenReturn(3.0);
+  when(settingsService.cardCornerRadius).thenReturn(CARD_CORNER_RADIUS_DEFAULT);
+  when(settingsService.appNamesOnFocusOnly).thenReturn(false);
+  when(settingsService.customAppLabel(any)).thenReturn(null);
   when(settingsService.screensaverClockStyle).thenReturn('minimal');
   when(settingsService.accentColorHex).thenReturn(ACCENT_COLOR_WHITE);
   return settingsService;

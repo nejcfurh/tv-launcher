@@ -69,9 +69,8 @@ class WatchNextHero extends StatelessWidget {
     final app = activeItem.packageName != null ? appsService.getApplication(activeItem.packageName) : null;
     final appName = app?.name;
     final localizations = AppLocalizations.of(context)!;
-    final sourceBadge = appName != null
-        ? '${localizations.watchNextSectionTitle.toUpperCase()} • ${appName.toUpperCase()}'
-        : localizations.watchNextSectionTitle.toUpperCase();
+    final sourceBadge = (appName != null ? localizations.watchNextOn : localizations.watchNextSectionTitle)
+        .toUpperCase();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: _kWatchNextHeroHorizontalPadding),
@@ -81,6 +80,8 @@ class WatchNextHero extends StatelessWidget {
         children: [
           _HeroInfo(
             sourceBadge: sourceBadge,
+            sourcePackageName: app?.packageName,
+            sourceAppName: appName,
             title: activeItem.title,
             description: activeItem.description?.trim(),
             progressPercent: activeItem.progressPercent,
@@ -114,14 +115,20 @@ class WatchNextHero extends StatelessWidget {
   }
 }
 
+const _kBadgeTextStyle = TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1);
+
 class _HeroInfo extends StatelessWidget {
   final String sourceBadge;
+  final String? sourcePackageName;
+  final String? sourceAppName;
   final String title;
   final String? description;
   final int? progressPercent;
 
   const _HeroInfo({
     required this.sourceBadge,
+    this.sourcePackageName,
+    this.sourceAppName,
     required this.title,
     required this.description,
     required this.progressPercent,
@@ -144,11 +151,18 @@ class _HeroInfo extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
           ),
-          child: Text(
-            sourceBadge,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1),
+          // Fixed height, so items with a logo and items with only text line up the same.
+          child: SizedBox(
+            height: 18,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(sourceBadge, maxLines: 1, style: _kBadgeTextStyle),
+                if (sourcePackageName != null)
+                  _SourceAppIcon(packageName: sourcePackageName!, appName: sourceAppName ?? ''),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 10),
@@ -399,6 +413,110 @@ class _HeroPaginationIndicator extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+}
+
+/// The source app's icon after "WATCH NEXT ON", or its name when the app has no icon to show.
+class _SourceAppIcon extends StatefulWidget {
+  final String packageName;
+  final String appName;
+
+  const _SourceAppIcon({required this.packageName, required this.appName});
+
+  @override
+  State<_SourceAppIcon> createState() => _SourceAppIconState();
+}
+
+/// White logos for apps whose own icon has its background baked in.
+const Map<String, ({String asset, double height})> kSourceAppLogoAssets = {
+  'com.netflix.ninja': (asset: 'assets/logo_netflix.png', height: 15),
+  // The HBO and SkyShowtime wordmarks are wide and heavy, so they read larger than the others at
+  // the same height.
+  'com.wbd.stream': (asset: 'assets/logo_hbo.png', height: 13),
+  'com.google.android.youtube.tv': (asset: 'assets/logo_youtube.png', height: 18),
+  'com.apple.atve.androidtv.appletv': (asset: 'assets/logo_appletv.png', height: 18),
+  'com.skyshowtime.skyshowtime.google': (asset: 'assets/logo_skyshowtime.png', height: 14),
+};
+
+class _SourceAppIconState extends State<_SourceAppIcon> {
+  static const double _height = 18;
+  static const double _maxWidth = 80;
+  Future<Uint8List>? _icon;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIcon();
+  }
+
+  @override
+  void didUpdateWidget(_SourceAppIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.packageName != widget.packageName) {
+      _loadIcon();
+    }
+  }
+
+  void _loadIcon() {
+    _icon = kSourceAppLogoAssets.containsKey(widget.packageName)
+        ? null
+        : context.read<AppsService>().getAppIconForeground(widget.packageName);
+  }
+
+  Widget _name() => Text(' ${widget.appName.toUpperCase()}', maxLines: 1, style: _kBadgeTextStyle);
+
+  Widget _logo(Widget image) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const SizedBox(width: 7),
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: _maxWidth, maxHeight: _height),
+        child: image,
+      ),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final logo = kSourceAppLogoAssets[widget.packageName];
+    if (logo != null) {
+      return _logo(
+        Image.asset(
+          logo.asset,
+          key: ValueKey(logo.asset),
+          height: logo.height,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (_, __, ___) => _name(),
+        ),
+      );
+    }
+    return FutureBuilder<Uint8List>(
+      future: _icon,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const SizedBox(width: _height + 7, height: _height);
+        }
+        final bytes = snapshot.data;
+        if (bytes == null || bytes.isEmpty) {
+          return _name();
+        }
+        return _logo(
+          Image.memory(
+            bytes,
+            key: ValueKey(widget.packageName),
+            height: _height,
+            fit: BoxFit.contain,
+            // Drawn in white like the bundled logos; the icon layer is transparent around the logo.
+            color: Colors.white,
+            colorBlendMode: BlendMode.srcIn,
+            filterQuality: FilterQuality.medium,
+            gaplessPlayback: true,
+            errorBuilder: (_, __, ___) => _name(),
+          ),
+        );
+      },
     );
   }
 }

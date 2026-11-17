@@ -195,4 +195,55 @@ void main() async {
       expect(sharedPreferences.getBool("watch_next_hide_programs_without_images"), isFalse);
     });
   });
+
+  group("cardCornerRadius", () {
+    test("defaults to 12", () {
+      expect(settingsService.cardCornerRadius, CARD_CORNER_RADIUS_DEFAULT);
+    });
+
+    test("cycles through options and wraps", () async {
+      final seen = <double>[];
+      for (var i = 0; i < CARD_CORNER_RADIUS_OPTIONS.length; i++) {
+        await settingsService.cycleCardCornerRadius();
+        seen.add(settingsService.cardCornerRadius);
+      }
+      expect(seen, [20.0, 28.0, 6.0, 12.0]);
+    });
+
+    test("restarts at first option when stored value is not an option", () async {
+      await settingsService.setCardCornerRadius(15.0);
+      await settingsService.cycleCardCornerRadius();
+      expect(settingsService.cardCornerRadius, CARD_CORNER_RADIUS_OPTIONS.first);
+    });
+  });
+
+  group("appNamesOnFocusOnly", () {
+    test("defaults to true", () {
+      expect(settingsService.appNamesOnFocusOnly, isTrue);
+    });
+
+    test("persists value", () async {
+      await settingsService.setAppNamesOnFocusOnly(false);
+      expect(settingsService.appNamesOnFocusOnly, isFalse);
+      expect(sharedPreferences.getBool("app_names_on_focus_only"), isFalse);
+    });
+  });
+
+  group("customAppLabel", () {
+    test("is null when unset", () {
+      expect(settingsService.customAppLabel("com.example"), isNull);
+    });
+
+    test("stores a trimmed label per package", () async {
+      await settingsService.setCustomAppLabel("com.example", "  Sky  ");
+      expect(settingsService.customAppLabel("com.example"), "Sky");
+      expect(settingsService.customAppLabel("com.other"), isNull);
+    });
+
+    test("blank label removes the custom label", () async {
+      await settingsService.setCustomAppLabel("com.example", "Sky");
+      await settingsService.setCustomAppLabel("com.example", "   ");
+      expect(settingsService.customAppLabel("com.example"), isNull);
+    });
+  });
 }

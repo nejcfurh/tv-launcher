@@ -24,6 +24,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.*;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.net.ConnectivityManager;
@@ -105,6 +106,7 @@ public class MainActivity extends FlutterActivity {
                 case "getApplications" -> result.success(getApplications());
                 case "getApplicationBanner" -> result.success(getApplicationBanner(call.arguments()));
                 case "getApplicationIcon" -> result.success(getApplicationIcon(call.arguments()));
+                case "getApplicationIconForeground" -> result.success(getApplicationIconForeground(call.arguments()));
                 case "applicationExists" -> result.success(applicationExists(call.arguments()));
                 case "launchActivityFromAction" -> result.success(launchActivityFromAction(call.arguments()));
                 case "launchApp" -> result.success(launchApp(call.arguments()));
@@ -358,6 +360,56 @@ public class MainActivity extends FlutterActivity {
         }
 
         return imageBytes;
+    }
+
+    /**
+     * The app icon without its background: the foreground layer of an adaptive icon, trimmed to
+     * the logo itself. Icons that are not adaptive have no separate background, so this returns
+     * nothing for them and the caller shows the app name instead.
+     */
+    private byte[] getApplicationIconForeground(String packageName) {
+        PackageManager packageManager = getPackageManager();
+        try {
+            Drawable drawable = packageManager.getApplicationInfo(packageName, 0).loadIcon(packageManager);
+            if (!(drawable instanceof AdaptiveIconDrawable adaptive) || adaptive.getForeground() == null) {
+                return new byte[0];
+            }
+            final int size = 432;
+            Bitmap layer = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            Drawable foreground = adaptive.getForeground();
+            foreground.setBounds(0, 0, size, size);
+            foreground.draw(new Canvas(layer));
+            // The layer pads the logo with a lot of empty space; keep only the logo.
+            Bitmap visible = trimTransparent(layer);
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            visible.compress(Bitmap.CompressFormat.PNG, 100, stream);
+            return stream.toByteArray();
+        } catch (PackageManager.NameNotFoundException ignored) {
+            return new byte[0];
+        }
+    }
+
+    /** Crops [bitmap] to the smallest box holding all its visible pixels; returns it whole if blank. */
+    static Bitmap trimTransparent(Bitmap bitmap) {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int[] pixels = new int[width * height];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+        int left = width, top = height, right = -1, bottom = -1;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if ((pixels[y * width + x] >>> 24) > 16) {
+                    if (x < left) left = x;
+                    if (x > right) right = x;
+                    if (y < top) top = y;
+                    if (y > bottom) bottom = y;
+                }
+            }
+        }
+        if (right < left || bottom < top) {
+            return bitmap;
+        }
+        return Bitmap.createBitmap(bitmap, left, top, right - left + 1, bottom - top + 1);
     }
 
     private boolean applicationExists(String packageName) {

@@ -21,7 +21,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flauncher/flauncher_channel.dart';
 import 'package:flauncher/providers/apps_service.dart';
+import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/widgets/add_to_category_dialog.dart';
+import 'package:flauncher/widgets/rename_app_dialog.dart';
 import 'package:flauncher/widgets/side_panel_dialog.dart';
 import 'package:flauncher/widgets/tv_media_picker.dart';
 import 'package:provider/provider.dart';
@@ -129,6 +131,29 @@ class _ApplicationInfoPanelState extends State<ApplicationInfoPanel>
                        ),
                        onPressed: () => Navigator.of(context).pop(ApplicationInfoPanelResult.reorderApp),
                      ),
+                   TextButton(
+                     child: Row(
+                       children: [
+                         const Icon(Icons.drive_file_rename_outline),
+                         Container(width: 8),
+                         Text(localizations.renameApp, style: Theme.of(context).textTheme.bodyMedium),
+                       ],
+                     ),
+                     onPressed: () async {
+                       final settings = context.read<SettingsService>();
+                       final packageName = widget.application.packageName;
+                       Navigator.of(context).pop(ApplicationInfoPanelResult.none);
+                       final label = await showDialog<String>(
+                         context: context,
+                         builder: (context) => RenameAppDialog(
+                           initialValue: settings.customAppLabel(packageName) ?? widget.application.name,
+                         ),
+                       );
+                       if (label != null) {
+                         await settings.setCustomAppLabel(packageName, label == widget.application.name ? "" : label);
+                       }
+                     },
+                   ),
                    TextButton(
                      child: Row(
                        children: [

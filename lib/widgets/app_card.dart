@@ -178,7 +178,15 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final bool showAppNames = context.select<SettingsService, bool>((s) => s.showAppNamesBelowIcons);
+    final (bool showAppNames, bool appNamesOnFocusOnly, double cornerRadius, String displayName) =
+        context.select<SettingsService, (bool, bool, double, String)>(
+      (s) => (
+        s.showAppNamesBelowIcons,
+        s.appNamesOnFocusOnly,
+        s.cardCornerRadius,
+        s.customAppLabel(widget.application.packageName) ?? widget.application.name,
+      ),
+    );
     final (bool animationEnabled, String accentColorHex, bool showFocusBorders, double borderThickness) = context.select<SettingsService, (bool, String, bool, double)>(
       (s) => (s.appHighlightAnimationEnabled, s.accentColorHex, s.showFocusBorders, s.focusBorderThickness),
     );
@@ -192,7 +200,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
         if (mounted) _updateHighlightAnimation();
       });
     }
-    final appImageWidget = _appImage();
+    final appImageWidget = _appImage(displayName);
     final bool shouldHighlight = _shouldHighlight();
 
     return FocusKeyboardListener(
@@ -220,7 +228,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                         fit: StackFit.expand,
                         children: [
                           Material(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(cornerRadius),
                             clipBehavior: Clip.antiAlias,
                             elevation: shouldHighlight ? 7 : 4,
                             shadowColor: Colors.black,
@@ -260,6 +268,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                                       final alpha = 0.65 + (_animation.value * 0.35);
                                       return _HighlightOutline(
                                         accentColor: _accentColor,
+                                        radius: cornerRadius,
                                         alpha: alpha,
                                         strokeWidth: borderThickness,
                                       );
@@ -272,6 +281,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                                 child: RepaintBoundary(
                                   child: _HighlightOutline(
                                     accentColor: _accentColor,
+                                    radius: cornerRadius,
                                     isMoving: _moving,
                                     strokeWidth: borderThickness,
                                   ),
@@ -283,8 +293,14 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                 ),
                 ),
               ),
+              // Hidden labels keep their space so rows don't jump when focus moves.
               if (showAppNames)
-                Padding(padding: const EdgeInsets.only(top: 8.0), child: _AppNameLabel(name: widget.application.name)),
+                AnimatedOpacity(
+                  opacity: !appNamesOnFocusOnly || shouldHighlight ? 1.0 : 0.0,
+                  duration: _focusAnimationDuration,
+                  curve: Curves.easeInOut,
+                  child: Padding(padding: const EdgeInsets.only(top: 8.0), child: _AppNameLabel(name: displayName)),
+                ),
             ],
           ),
         ),
@@ -321,8 +337,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
     return child;
   }
 
-  Widget _appImage() {
-    App app = widget.application;
+  Widget _appImage(String displayName) {
 
     if (_loadedImage != null) {
       final (type, image) = _loadedImage!;
@@ -339,7 +354,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                 child: Padding(
                   padding: const EdgeInsets.only(left: 8),
                   child: Text(
-                    app.name,
+                    displayName,
                     style: Theme.of(context).textTheme.bodySmall,
                     overflow: TextOverflow.ellipsis,
                     maxLines: 3,
@@ -355,7 +370,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
         padding: const EdgeInsets.all(8),
         child: Center(
           child: Text(
-            app.name,
+            displayName,
             style: Theme.of(context).textTheme.bodySmall,
             overflow: TextOverflow.ellipsis,
             maxLines: 3,
@@ -578,15 +593,13 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
     } else if (_validationKeys.contains(key)) {
       if (!_clicked) {
         setState(() => _clicked = true);
-        Future.delayed(const Duration(milliseconds: 150), () {
-          if (!mounted) return;
-          context.read<AppsService>().launchApp(widget.application);
-          // Reset after a short delay so it looks normal when user returns
-          Future.delayed(const Duration(milliseconds: 500), () {
-            if (mounted) {
-              setState(() => _clicked = false);
-            }
-          });
+        // Launch right away; the press animation plays while the app opens.
+        context.read<AppsService>().launchApp(widget.application);
+        // Reset after a short delay so it looks normal when user returns
+        Future.delayed(const Duration(milliseconds: 650), () {
+          if (mounted) {
+            setState(() => _clicked = false);
+          }
         });
       }
       return KeyEventResult.handled;
@@ -635,12 +648,14 @@ class _AppNameLabel extends StatelessWidget {
 
 class _HighlightOutline extends StatelessWidget {
   final Color accentColor;
+  final double radius;
   final double alpha;
   final bool isMoving;
   final double strokeWidth;
 
   const _HighlightOutline({
     required this.accentColor,
+    required this.radius,
     this.alpha = 1.0,
     this.isMoving = false,
     this.strokeWidth = 1.5,
@@ -650,7 +665,7 @@ class _HighlightOutline extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       foregroundPainter: AppCardContourPainter(
-        radius: 12.0,
+        radius: radius,
         strokeWidth: isMoving ? max(2.0, strokeWidth + 0.5) : strokeWidth,
         accentColor: accentColor,
         alpha: alpha,

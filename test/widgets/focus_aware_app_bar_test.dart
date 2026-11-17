@@ -1,3 +1,4 @@
+import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/launcher_state.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
@@ -35,6 +36,7 @@ void main() {
         providers: [
           ChangeNotifierProvider<SettingsService>.value(value: settingsService),
           ChangeNotifierProvider<LauncherState>.value(value: launcherState),
+          ChangeNotifierProvider<AppsService>.value(value: MockAppsService()),
         ],
         child: MaterialApp(
           home: Scaffold(

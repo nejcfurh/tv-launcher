@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flauncher/l10n/app_localizations.dart';
@@ -115,12 +116,33 @@ class TestAppsService extends ChangeNotifier implements AppsService {
         name: 'Netflix',
       );
     }
+    if (packageName == 'com.disney.disneyplus') {
+      return fakeApp(packageName: 'com.disney.disneyplus', name: 'Disney+');
+    }
     return null;
+  }
+
+  final List<String> foregroundIconRequests = [];
+  Uint8List? foregroundIcon;
+
+  @override
+  Future<Uint8List> getAppIconForeground(String packageName) async {
+    foregroundIconRequests.add(packageName);
+    return foregroundIcon ?? _onePixelPng;
   }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
+final Uint8List _onePixelPng = Uint8List.fromList([
+  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
+  0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+  0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+]);
 
 void main() {
   group('WatchNextHero', () {
@@ -161,7 +183,7 @@ void main() {
       appsService = TestAppsService();
     });
 
-    Widget createTestWidget() {
+    Widget createTestWidget({List<WatchNextItem>? items}) {
       return MultiProvider(
         providers: [
           ChangeNotifierProvider<SettingsService>.value(value: settingsService),
@@ -173,7 +195,7 @@ void main() {
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: WatchNextHero(
-              items: sampleItems,
+              items: items ?? sampleItems,
               isFirstSection: true,
             ),
           ),
@@ -187,9 +209,82 @@ void main() {
 
       expect(find.text('Severance'), findsOneWidget);
       expect(find.textContaining('Mark leads a team'), findsOneWidget);
-      expect(find.textContaining('NETFLIX'), findsOneWidget);
+      expect(find.text('WATCH NEXT ON'), findsOneWidget);
       expect(find.text('Resume'), findsOneWidget);
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
+    });
+
+    testWidgets('badge reads WATCH NEXT ON followed by the white Netflix logo', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      final badgeRow = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Row)).first;
+      expect(
+        find.descendant(
+          of: badgeRow,
+          matching: find.byWidgetPredicate(
+              (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/logo_netflix.png'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('NETFLIX'), findsNothing);
+      expect(appsService.foregroundIconRequests, isEmpty);
+    });
+
+    final disneyItems = [
+      WatchNextItem(id: 3, title: 'black-ish', packageName: 'com.disney.disneyplus'),
+    ];
+
+    testWidgets('badge uses the app icon layer for apps without a bundled logo', (tester) async {
+      watchNextService.testItems = disneyItems;
+      await tester.pumpWidget(createTestWidget(items: disneyItems));
+      await tester.pumpAndSettle();
+
+      expect(appsService.foregroundIconRequests, contains('com.disney.disneyplus'));
+      final badgeRow = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Row)).first;
+      final logo = tester.widget<Image>(find.descendant(of: badgeRow, matching: find.byType(Image)));
+      expect(logo.color, Colors.white);
+      expect(logo.colorBlendMode, BlendMode.srcIn);
+      expect(find.textContaining('DISNEY'), findsNothing);
+    });
+
+    testWidgets('badge names the source app when it has no icon', (tester) async {
+      appsService.foregroundIcon = Uint8List(0);
+      watchNextService.testItems = disneyItems;
+      await tester.pumpWidget(createTestWidget(items: disneyItems));
+      await tester.pumpAndSettle();
+
+      expect(find.text('WATCH NEXT ON'), findsOneWidget);
+      expect(find.text(' DISNEY+'), findsOneWidget);
+    });
+
+    testWidgets('badge keeps the same height with a logo and with only a name', (tester) async {
+      Future<double> badgeHeight() async {
+        await tester.pumpAndSettle();
+        final badge = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Container)).first;
+        return tester.getSize(badge).height;
+      }
+
+      await tester.pumpWidget(createTestWidget());
+      final withLogo = await badgeHeight();
+
+      appsService.foregroundIcon = Uint8List(0);
+      watchNextService.testItems = disneyItems;
+      await tester.pumpWidget(createTestWidget(items: disneyItems));
+      final withName = await badgeHeight();
+
+      expect(withName, withLogo);
+    });
+
+    test('every bundled source logo exists', () {
+      for (final logo in kSourceAppLogoAssets.values) {
+        expect(File(logo.asset).existsSync(), isTrue, reason: logo.asset);
+        expect(logo.height, inInclusiveRange(10, 18), reason: logo.asset);
+      }
+      expect(kSourceAppLogoAssets['com.skyshowtime.skyshowtime.google']?.asset, 'assets/logo_skyshowtime.png');
+      // HBO and SkyShowtime are wide, heavy wordmarks, so they are shown smaller than the 18 px maximum.
+      expect(kSourceAppLogoAssets['com.wbd.stream']!.height, 13);
+      expect(kSourceAppLogoAssets['com.skyshowtime.skyshowtime.google']!.height, 14);
     });
 
     testWidgets('clicking watch button triggers launchItem', (tester) async {

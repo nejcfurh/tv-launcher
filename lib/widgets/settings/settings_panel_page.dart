@@ -89,7 +89,21 @@ class SettingsPanelPage extends StatelessWidget {
                           ? LTvLauncherAboutDialog(packageInfo: snapshot.data!)
                           : Container(),
                     )))
-      ])))
+      ]))),
+      Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 20),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              localizations.createdBy,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white.withValues(alpha: 0.6)),
+            ),
+            const SizedBox(width: 10),
+            Image.asset('assets/nejcfurh_logo.png', height: 26, filterQuality: FilterQuality.medium),
+          ],
+        ),
+      ),
     ]);
   }
 }

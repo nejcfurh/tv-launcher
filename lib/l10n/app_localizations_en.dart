@@ -9,7 +9,10 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get aboutFlauncher => 'About Arc Launcher';
+  String get aboutFlauncher => 'About';
+
+  @override
+  String get createdBy => 'Created by';
 
   @override
   String get addCategory => 'Add category';
@@ -195,6 +198,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get renameCategory => 'Rename category';
 
   @override
+  String get renameApp => 'Rename';
+
+  @override
+  String get renameAppHint => 'Leave empty to use the app\'s own name';
+
+  @override
+  String get cardCornerRadius => 'Tile corner radius';
+
+  @override
+  String get appNamesOnFocusOnly => 'Show name of selected app only';
+
+  @override
   String get reorder => 'Reorder';
 
   @override
@@ -374,6 +389,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get watchNextSectionTitle => 'Watch Next';
+
+  @override
+  String get watchNextOn => 'Watch Next on';
 
   @override
   String get showWatchNextSection => 'Show Watch Next Section';

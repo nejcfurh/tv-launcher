@@ -9,7 +9,10 @@ class AppLocalizationsVi extends AppLocalizations {
   AppLocalizationsVi([String locale = 'vi']) : super(locale);
 
   @override
-  String get aboutFlauncher => 'Giới thiệu Arc Launcher';
+  String get aboutFlauncher => 'Giới thiệu';
+
+  @override
+  String get createdBy => 'Tạo bởi';
 
   @override
   String get addCategory => 'Thêm danh mục';
@@ -196,6 +199,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get renameCategory => 'Đổi tên danh mục';
 
   @override
+  String get renameApp => 'Đổi tên';
+
+  @override
+  String get renameAppHint => 'Để trống để dùng tên gốc của ứng dụng';
+
+  @override
+  String get cardCornerRadius => 'Độ bo góc ô';
+
+  @override
+  String get appNamesOnFocusOnly => 'Chỉ hiện tên ứng dụng đang chọn';
+
+  @override
   String get reorder => 'Sắp xếp lại';
 
   @override
@@ -376,6 +391,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get watchNextSectionTitle => 'Xem tiếp';
+
+  @override
+  String get watchNextOn => 'Xem tiếp trên';
 
   @override
   String get showWatchNextSection => 'Hiện mục Xem tiếp';

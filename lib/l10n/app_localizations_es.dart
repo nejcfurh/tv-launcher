@@ -9,7 +9,10 @@ class AppLocalizationsEs extends AppLocalizations {
   AppLocalizationsEs([String locale = 'es']) : super(locale);
 
   @override
-  String get aboutFlauncher => 'Acerca de FLauncher';
+  String get aboutFlauncher => 'Acerca de';
+
+  @override
+  String get createdBy => 'Creado por';
 
   @override
   String get addCategory => 'Agregar categoría';
@@ -198,6 +201,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get renameCategory => 'Renombrar categoría';
 
   @override
+  String get renameApp => 'Renombrar';
+
+  @override
+  String get renameAppHint => 'Déjalo vacío para usar el nombre de la app';
+
+  @override
+  String get cardCornerRadius => 'Radio de las esquinas';
+
+  @override
+  String get appNamesOnFocusOnly =>
+      'Mostrar solo el nombre de la app seleccionada';
+
+  @override
   String get reorder => 'Reordenar';
 
   @override
@@ -379,6 +395,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get watchNextSectionTitle => 'Ver después';
+
+  @override
+  String get watchNextOn => 'Ver después en';
 
   @override
   String get showWatchNextSection => 'Mostrar sección Ver después';

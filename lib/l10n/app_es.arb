@@ -1,5 +1,6 @@
 {
-    "aboutFlauncher": "Acerca de FLauncher",
+    "aboutFlauncher": "Acerca de",
+    "createdBy": "Creado por",
     "addCategory": "Agregar categoría",
     "addSection": "Agregar sección",
     "alphabetical": "Alfabético",
@@ -84,6 +85,10 @@
         }
     },
     "renameCategory": "Renombrar categoría",
+    "renameApp": "Renombrar",
+    "renameAppHint": "Déjalo vacío para usar el nombre de la app",
+    "cardCornerRadius": "Radio de las esquinas",
+    "appNamesOnFocusOnly": "Mostrar solo el nombre de la app seleccionada",
     "reorder": "Reordenar",
     "row": "Row",
     "rowHeight": "Row height",
@@ -170,6 +175,7 @@
     "pickDayVideoWallpaper": "Elegir vídeo de día",
     "pickNightVideoWallpaper": "Elegir vídeo de noche",
     "watchNextSectionTitle": "Ver después",
+    "watchNextOn": "Ver después en",
     "showWatchNextSection": "Mostrar sección Ver después",
     "watchNextPermissionTitle": "Se requiere permiso para Ver después",
     "watchNextPermissionBody": "Permite el acceso a la guía de TV para mostrar lo que estabas viendo.",

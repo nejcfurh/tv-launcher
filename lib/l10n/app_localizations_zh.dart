@@ -9,7 +9,10 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get aboutFlauncher => '关于 Arc Launcher';
+  String get aboutFlauncher => '关于';
+
+  @override
+  String get createdBy => '创作者';
 
   @override
   String get addCategory => '添加分类';
@@ -194,6 +197,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get renameCategory => '重命名分类';
 
   @override
+  String get renameApp => '重命名';
+
+  @override
+  String get renameAppHint => '留空则使用应用自身名称';
+
+  @override
+  String get cardCornerRadius => '磁贴圆角半径';
+
+  @override
+  String get appNamesOnFocusOnly => '仅显示所选应用的名称';
+
+  @override
   String get reorder => '重新排序';
 
   @override
@@ -370,6 +385,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get watchNextSectionTitle => '继续观看';
+
+  @override
+  String get watchNextOn => '继续观看 ·';
 
   @override
   String get showWatchNextSection => '显示“继续观看”分区';

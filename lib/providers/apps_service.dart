@@ -42,6 +42,7 @@ class AppsService extends ChangeNotifier
   List<LauncherSection> _launcherSections = List.empty(growable: true);
   Map<String, App> _applications = Map();
   Map<String, Uint8List> _iconCache = Map();
+  final Map<String, Uint8List> _iconForegroundCache = {};
   Map<String, Uint8List> _bannerCache = Map();
 
   Map<int, Category> _categoriesById = Map();
@@ -108,6 +109,7 @@ class AppsService extends ChangeNotifier
 
       if (changedPackageName != null) {
         _iconCache.remove(changedPackageName);
+        _iconForegroundCache.remove(changedPackageName);
         _bannerCache.remove(changedPackageName);
         _dirtyImagePackages.add(changedPackageName);
       }
@@ -175,6 +177,7 @@ class AppsService extends ChangeNotifier
               _applications[newApp.packageName] = newApp;
             }
             _iconCache.remove(newApp.packageName);
+            _iconForegroundCache.remove(newApp.packageName);
             _bannerCache.remove(newApp.packageName);
           }
           break;
@@ -184,6 +187,7 @@ class AppsService extends ChangeNotifier
 
           // Clear icon cache for removed app
           _iconCache.remove(packageName);
+          _iconForegroundCache.remove(packageName);
           _bannerCache.remove(packageName);
 
           App? application = _applications.remove(packageName);
@@ -239,6 +243,8 @@ class AppsService extends ChangeNotifier
     final defaultFavoriteLauncherPackageNames = [
       'com.omeda.arc',
       'com.omeda.arc.debug',
+      'local.tvlauncher',
+      'local.tvlauncher.debug',
     ];
 
     return _database.transaction(() async {
@@ -453,20 +459,30 @@ class AppsService extends ChangeNotifier
     return bytes;
   }
 
+  /// The app's icon without its background, for small badges.
+  Future<Uint8List> getAppIconForeground(String packageName) async {
+    final cached = _iconForegroundCache[packageName];
+    if (cached != null) {
+      return cached;
+    }
+    final bytes = await _fLauncherChannel.getApplicationIconForeground(packageName);
+    if (bytes.isNotEmpty) {
+      _iconForegroundCache[packageName] = bytes;
+    }
+    return bytes;
+  }
+
   Future<void> launchApp(App app) async {
+    // Ask Android to open the app before the database write and the rebuild, so neither delays it.
+    final Future<void> launch = app.action == null
+        ? _fLauncherChannel.launchApp(app.packageName)
+        : _fLauncherChannel.launchActivityFromAction(app.action!);
+
     app.lastLaunchedAt = DateTime.now();
     await _database.updateApp(app.packageName, AppsCompanion(lastLaunchedAt: Value(app.lastLaunchedAt)));
     notifyListeners();
 
-    Future<void> future;
-    if (app.action == null) {
-      future = _fLauncherChannel.launchApp(app.packageName);
-    }
-    else {
-      future = _fLauncherChannel.launchActivityFromAction(app.action!);
-    }
-
-    return future;
+    return launch;
   }
 
   Future<void> openAppInfo(App app) => _fLauncherChannel.openAppInfo(app.packageName);

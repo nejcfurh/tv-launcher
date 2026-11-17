@@ -54,6 +54,9 @@ const _kDockOuterPadding = EdgeInsets.only(
   bottom: 16,
 );
 
+/// Space left between the dock's outer padding and the bottom edge of the screen.
+const _kDockBottomMargin = 8.0;
+
 class FLauncher extends StatefulWidget {
   const FLauncher({super.key});
 
@@ -67,6 +70,11 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
   int _homePressGeneration = 0;
   final GlobalKey _dockKey = GlobalKey();
   late final _HeroBackdropBaker _heroBackdropBaker = _HeroBackdropBaker();
+
+  /// Added to the spacer above the dock so the dock ends at the bottom of the screen.
+  /// The spacer's base height assumes a fixed dock height, which changes with the
+  /// number of favorites and with app names on or off.
+  double _dockSpacerCorrection = 0;
 
   @override
   void initState() {
@@ -287,17 +295,24 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
 
     final watchNextSpace = watchNextBigPicture ? 385 : 410;
 
+    if (favoriteApps.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _anchorDockToBottom());
+    }
+
     return CustomScrollView(
       controller: _scrollController,
       slivers: [
         if (favoriteApps.isNotEmpty || showWatchNextSection) ...[
           SliverToBoxAdapter(
             child: SizedBox(
-              height:
-                  MediaQuery.of(context).size.height -
-                  MediaQuery.of(context).padding.top -
-                  kToolbarHeight -
-                  (reserveWatchNextSpace ? watchNextSpace : 150),
+              height: max(
+                0.0,
+                MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    kToolbarHeight -
+                    (reserveWatchNextSpace ? watchNextSpace : 150) +
+                    (favoriteApps.isNotEmpty ? _dockSpacerCorrection : 0),
+              ),
             ),
           ),
           if (showWatchNextSection)
@@ -539,6 +554,25 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeInOutCubic,
     );
+  }
+
+  /// Measures where the dock ends and moves it so it sits [_kDockBottomMargin] above
+  /// the bottom edge. Only runs while the page is unscrolled, so the measurement is
+  /// the resting position.
+  void _anchorDockToBottom() {
+    if (!mounted || !_scrollController.hasClients || _scrollController.offset != 0) {
+      return;
+    }
+    final dockBox = _dockKey.currentContext?.findRenderObject() as RenderBox?;
+    if (dockBox == null || !dockBox.hasSize) {
+      return;
+    }
+    final dockBottom = dockBox.localToGlobal(Offset(0, dockBox.size.height)).dy;
+    final gap = MediaQuery.sizeOf(context).height - _kDockBottomMargin - dockBottom;
+    if (gap.abs() < 1) {
+      return;
+    }
+    setState(() => _dockSpacerCorrection += gap);
   }
 
   double? _dockTopScrollOffset() {

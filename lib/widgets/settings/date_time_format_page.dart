@@ -31,6 +31,7 @@ const List<(String format, String example)> dateFormatPresets = [
   ('EEEE d', 'Friday 17'),
   ('E d', 'Fri 17'),
   ('dd/MM/y', '17/01/2026'),
+  ('EEEE, dd.MM.yyyy', 'Saturday, 17.01.2026'),
   ('MMM d, y', 'Jan 17, 2026'),
   ('d MMMM', '17 January'),
   ('M/d/y', '1/17/2026'),

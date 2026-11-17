@@ -162,6 +162,12 @@ void main() {
     final app = fakeApp();
 
     await appsService.launchApp(app);
+
+    // The app is opened before the launch time is written, so the write cannot delay it.
+    verifyInOrder([
+      channel.launchApp(app.packageName),
+      database.updateApp(app.packageName, any),
+    ]);
   });
 
   test("openAppInfo calls channel", () async {
