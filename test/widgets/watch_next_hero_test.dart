@@ -115,6 +115,9 @@ class TestAppsService extends ChangeNotifier implements AppsService {
         name: 'Netflix',
       );
     }
+    if (packageName == 'com.disney.disneyplus') {
+      return fakeApp(packageName: 'com.disney.disneyplus', name: 'Disney+');
+    }
     return null;
   }
 
@@ -179,7 +182,7 @@ void main() {
       appsService = TestAppsService();
     });
 
-    Widget createTestWidget() {
+    Widget createTestWidget({List<WatchNextItem>? items}) {
       return MultiProvider(
         providers: [
           ChangeNotifierProvider<SettingsService>.value(value: settingsService),
@@ -191,7 +194,7 @@ void main() {
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: WatchNextHero(
-              items: sampleItems,
+              items: items ?? sampleItems,
               isFirstSection: true,
             ),
           ),
@@ -210,23 +213,46 @@ void main() {
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     });
 
-    testWidgets('badge reads WATCH NEXT ON followed by the source app icon', (tester) async {
+    testWidgets('badge reads WATCH NEXT ON followed by the white Netflix logo', (tester) async {
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
 
-      expect(appsService.foregroundIconRequests, contains('com.netflix.ninja'));
+      final badgeRow = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Row)).first;
+      expect(
+        find.descendant(
+          of: badgeRow,
+          matching: find.byWidgetPredicate(
+              (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/logo_netflix.png'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('NETFLIX'), findsNothing);
+      expect(appsService.foregroundIconRequests, isEmpty);
+    });
+
+    final disneyItems = [
+      WatchNextItem(id: 3, title: 'black-ish', packageName: 'com.disney.disneyplus'),
+    ];
+
+    testWidgets('badge uses the app icon layer for apps without a bundled logo', (tester) async {
+      watchNextService.testItems = disneyItems;
+      await tester.pumpWidget(createTestWidget(items: disneyItems));
+      await tester.pumpAndSettle();
+
+      expect(appsService.foregroundIconRequests, contains('com.disney.disneyplus'));
       final badgeRow = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Row)).first;
       expect(find.descendant(of: badgeRow, matching: find.byType(Image)), findsOneWidget);
-      expect(find.textContaining('NETFLIX'), findsNothing);
+      expect(find.textContaining('DISNEY'), findsNothing);
     });
 
     testWidgets('badge names the source app when it has no icon', (tester) async {
       appsService.foregroundIcon = Uint8List(0);
-      await tester.pumpWidget(createTestWidget());
+      watchNextService.testItems = disneyItems;
+      await tester.pumpWidget(createTestWidget(items: disneyItems));
       await tester.pumpAndSettle();
 
       expect(find.text('WATCH NEXT ON'), findsOneWidget);
-      expect(find.text(' NETFLIX'), findsOneWidget);
+      expect(find.text(' DISNEY+'), findsOneWidget);
     });
 
     testWidgets('clicking watch button triggers launchItem', (tester) async {

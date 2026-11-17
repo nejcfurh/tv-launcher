@@ -423,51 +423,84 @@ class _SourceAppIcon extends StatefulWidget {
   State<_SourceAppIcon> createState() => _SourceAppIconState();
 }
 
+/// White logos for apps whose own icon has its background baked in.
+const Map<String, String> kSourceAppLogoAssets = {
+  'com.netflix.ninja': 'assets/logo_netflix.png',
+  'com.wbd.stream': 'assets/logo_hbo.png',
+  'com.google.android.youtube.tv': 'assets/logo_youtube.png',
+  'com.apple.atve.androidtv.appletv': 'assets/logo_appletv.png',
+};
+
 class _SourceAppIconState extends State<_SourceAppIcon> {
-  static const double _size = 16;
-  late Future<Uint8List> _icon;
+  static const double _height = 18;
+  static const double _maxWidth = 80;
+  Future<Uint8List>? _icon;
 
   @override
   void initState() {
     super.initState();
-    _icon = context.read<AppsService>().getAppIconForeground(widget.packageName);
+    _loadIcon();
   }
 
   @override
   void didUpdateWidget(_SourceAppIcon oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.packageName != widget.packageName) {
-      _icon = context.read<AppsService>().getAppIconForeground(widget.packageName);
+      _loadIcon();
     }
   }
 
+  void _loadIcon() {
+    _icon = kSourceAppLogoAssets.containsKey(widget.packageName)
+        ? null
+        : context.read<AppsService>().getAppIconForeground(widget.packageName);
+  }
+
+  Widget _name() => Text(' ${widget.appName.toUpperCase()}', maxLines: 1, style: _kBadgeTextStyle);
+
+  Widget _logo(Widget image) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(width: 7),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _maxWidth, maxHeight: _height),
+            child: image,
+          ),
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
+    final asset = kSourceAppLogoAssets[widget.packageName];
+    if (asset != null) {
+      return _logo(Image.asset(
+        asset,
+        key: ValueKey(asset),
+        height: _height,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
+        errorBuilder: (_, __, ___) => _name(),
+      ));
+    }
     return FutureBuilder<Uint8List>(
       future: _icon,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const SizedBox(width: _size + 6, height: _size);
+          return const SizedBox(width: _height + 7, height: _height);
         }
         final bytes = snapshot.data;
         if (bytes == null || bytes.isEmpty) {
-          return Text(' ${widget.appName.toUpperCase()}', maxLines: 1, style: _kBadgeTextStyle);
+          return _name();
         }
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(width: 6),
-            Image.memory(
-              bytes,
-              key: ValueKey(widget.packageName),
-              width: _size,
-              height: _size,
-              filterQuality: FilterQuality.medium,
-              gaplessPlayback: true,
-              errorBuilder: (_, __, ___) => Text(widget.appName.toUpperCase(), style: _kBadgeTextStyle),
-            ),
-          ],
-        );
+        return _logo(Image.memory(
+          bytes,
+          key: ValueKey(widget.packageName),
+          height: _height,
+          fit: BoxFit.contain,
+          filterQuality: FilterQuality.medium,
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => _name(),
+        ));
       },
     );
   }

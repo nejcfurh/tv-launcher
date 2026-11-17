@@ -363,8 +363,8 @@ public class MainActivity extends FlutterActivity {
     }
 
     /**
-     * The app icon without its background: the foreground layer of an adaptive icon, cropped to
-     * the part a launcher shows. Icons that are not adaptive are returned whole.
+     * The app icon without its background: the foreground layer of an adaptive icon, trimmed to
+     * the logo itself. Icons that are not adaptive are returned whole.
      */
     private byte[] getApplicationIconForeground(String packageName) {
         PackageManager packageManager = getPackageManager();
@@ -373,20 +373,42 @@ public class MainActivity extends FlutterActivity {
             if (!(drawable instanceof AdaptiveIconDrawable adaptive) || adaptive.getForeground() == null) {
                 return drawable != null ? drawableToByteArray(drawable) : new byte[0];
             }
-            // Adaptive layers are 108dp; launchers show the centre 72dp, so crop to that.
-            final int size = 216;
+            final int size = 432;
             Bitmap layer = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
             Drawable foreground = adaptive.getForeground();
             foreground.setBounds(0, 0, size, size);
             foreground.draw(new Canvas(layer));
-            int inset = size / 6;
-            Bitmap visible = Bitmap.createBitmap(layer, inset, inset, size - 2 * inset, size - 2 * inset);
+            // The layer pads the logo with a lot of empty space; keep only the logo.
+            Bitmap visible = trimTransparent(layer);
             ByteArrayOutputStream stream = new ByteArrayOutputStream();
             visible.compress(Bitmap.CompressFormat.PNG, 100, stream);
             return stream.toByteArray();
         } catch (PackageManager.NameNotFoundException ignored) {
             return new byte[0];
         }
+    }
+
+    /** Crops [bitmap] to the smallest box holding all its visible pixels; returns it whole if blank. */
+    static Bitmap trimTransparent(Bitmap bitmap) {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int[] pixels = new int[width * height];
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
+        int left = width, top = height, right = -1, bottom = -1;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if ((pixels[y * width + x] >>> 24) > 16) {
+                    if (x < left) left = x;
+                    if (x > right) right = x;
+                    if (y < top) top = y;
+                    if (y > bottom) bottom = y;
+                }
+            }
+        }
+        if (right < left || bottom < top) {
+            return bitmap;
+        }
+        return Bitmap.createBitmap(bitmap, left, top, right - left + 1, bottom - top + 1);
     }
 
     private boolean applicationExists(String packageName) {
