@@ -79,9 +79,6 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
   late final _HeroBackdropBaker _heroBackdropBaker = _HeroBackdropBaker();
 
   /// Added to the spacer above the dock so the dock ends at the bottom of the screen.
-  /// The spacer's base height assumes a fixed dock height, which changes with the
-  /// number of favorites and with app names on or off.
-  double _dockSpacerCorrection = 0;
 
   @override
   void initState() {
@@ -337,43 +334,25 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
 
     if (favoriteApps.isEmpty && otherSections.isEmpty) return _emptyState(context);
 
-    // Big picture: puts the hero's top at y = 226 on a 540 dp tall screen; the dock anchoring below
-    // corrects any difference.
+    // Space kept for Watch Next when there is no dock below it.
     final watchNextSpace = watchNextBigPicture ? 314 : 410;
 
-    if (favoriteApps.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _anchorDockToBottom());
-    }
-
-    return CustomScrollView(
-      controller: _scrollController,
-      slivers: [
-        if (favoriteApps.isNotEmpty || showWatchNextSection) ...[
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: max(
-                0.0,
-                MediaQuery.of(context).size.height -
-                    MediaQuery.of(context).padding.top -
-                    kToolbarHeight -
-                    (reserveWatchNextSpace ? watchNextSpace : 150) +
-                    (favoriteApps.isNotEmpty ? _dockSpacerCorrection : 0),
-              ),
-            ),
-          ),
-          if (showWatchNextSection)
-            SliverToBoxAdapter(
-              child: RepaintBoundary(
-                child: WatchNextRow(
-                  isFirstSection: favoriteApps.isEmpty,
-                  isAboveDock: true,
-                  onItemFocused: _onHomeSectionFocused,
+    // Watch Next and the dock, built here because the dock reads providers during build.
+    final Widget? aboveFold = favoriteApps.isEmpty
+        ? null
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (showWatchNextSection)
+                RepaintBoundary(
+                  child: WatchNextRow(
+                    isFirstSection: false,
+                    isAboveDock: true,
+                    onItemFocused: _onHomeSectionFocused,
+                  ),
                 ),
-              ),
-            ),
-          if (favoriteApps.isNotEmpty)
-            SliverToBoxAdapter(
-              child: KeyedSubtree(
+              KeyedSubtree(
                 key: _dockKey,
                 child: Padding(
                   padding: _kDockOuterPadding,
@@ -387,7 +366,46 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                   ),
                 ),
               ),
+            ],
+          );
+
+    return CustomScrollView(
+      controller: _scrollController,
+      slivers: [
+        if (aboveFold != null)
+          // At least one screen tall with the dock against its bottom edge, so the dock stays put
+          // while what is above it (the hero arriving, the permission banner) changes height.
+          SliverLayoutBuilder(
+            builder: (_, constraints) => SliverToBoxAdapter(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: max(0.0, constraints.viewportMainAxisExtent - _kDockBottomMargin),
+                ),
+                child: Align(alignment: Alignment.bottomCenter, child: aboveFold),
+              ),
             ),
+          )
+        else if (showWatchNextSection) ...[
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: max(
+                0.0,
+                MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    kToolbarHeight -
+                    (reserveWatchNextSpace ? watchNextSpace : 150),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: RepaintBoundary(
+              child: WatchNextRow(
+                isFirstSection: true,
+                isAboveDock: true,
+                onItemFocused: _onHomeSectionFocused,
+              ),
+            ),
+          ),
         ],
         ..._buildSectionSlivers(
           otherSections,
@@ -601,25 +619,6 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeInOutCubic,
     );
-  }
-
-  /// Measures where the dock ends and moves it so it sits [_kDockBottomMargin] above
-  /// the bottom edge. Only runs while the page is unscrolled, so the measurement is
-  /// the resting position.
-  void _anchorDockToBottom() {
-    if (!mounted || !_scrollController.hasClients || _scrollController.offset != 0) {
-      return;
-    }
-    final dockBox = _dockKey.currentContext?.findRenderObject() as RenderBox?;
-    if (dockBox == null || !dockBox.hasSize) {
-      return;
-    }
-    final dockBottom = dockBox.localToGlobal(Offset(0, dockBox.size.height)).dy;
-    final gap = MediaQuery.sizeOf(context).height - _kDockBottomMargin - dockBottom;
-    if (gap.abs() < 1) {
-      return;
-    }
-    setState(() => _dockSpacerCorrection += gap);
   }
 
   double? _dockTopScrollOffset() {

@@ -255,6 +255,27 @@ void main() {
       expect(find.textContaining('DISNEY'), findsNothing);
     });
 
+    testWidgets('badge logo fades in once it is decoded instead of popping in', (tester) async {
+      // A logo already in the image cache shows at once, without a fade: start from a cold cache.
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      appsService.foregroundIcon = Uint8List.fromList(_onePixelPng);
+      watchNextService.testItems = disneyItems;
+      await tester.pumpWidget(createTestWidget(items: disneyItems));
+      await tester.pump();
+      await tester.pump();
+      final badgeRow = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Row)).first;
+      final fade = find.descendant(of: badgeRow, matching: find.byType(AnimatedOpacity));
+      expect(tester.widget<AnimatedOpacity>(fade).opacity, 0, reason: 'not decoded yet');
+
+      for (var i = 0; i < 50 && tester.widget<AnimatedOpacity>(fade).opacity == 0; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
+      expect(tester.widget<AnimatedOpacity>(fade).opacity, 1);
+      expect(tester.widget<AnimatedOpacity>(fade).duration, kSourceLogoFadeDuration);
+    });
+
     testWidgets('badge names the source app when it has no icon', (tester) async {
       appsService.foregroundIcon = Uint8List(0);
       watchNextService.testItems = disneyItems;

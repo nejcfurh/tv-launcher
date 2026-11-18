@@ -646,6 +646,9 @@ const Map<String, ({String asset, double height})> kSourceAppLogoAssets = {
   'com.skyshowtime.skyshowtime.google': (asset: 'assets/logo_skyshowtime.png', height: 14),
 };
 
+/// How long a service logo takes to fade in once it is decoded.
+const kSourceLogoFadeDuration = Duration(milliseconds: 150);
+
 class _SourceAppIconState extends State<_SourceAppIcon> {
   static const double _height = 18;
   static const double _maxWidth = 80;
@@ -673,6 +676,17 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
 
   Widget _name() => Text(' ${widget.appName.toUpperCase()}', maxLines: 1, style: _kBadgeTextStyle);
 
+  /// Fades the logo in when its first frame is decoded, instead of popping it in after the label.
+  static Widget _fadeInFrame(BuildContext context, Widget child, int? frame, bool wasSynchronouslyLoaded) {
+    if (wasSynchronouslyLoaded) return child;
+    return AnimatedOpacity(
+      opacity: frame == null ? 0 : 1,
+      duration: kSourceLogoFadeDuration,
+      curve: Curves.easeOut,
+      child: child,
+    );
+  }
+
   Widget _logo(Widget image) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
@@ -695,6 +709,7 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
           height: logo.height,
           fit: BoxFit.contain,
           filterQuality: FilterQuality.medium,
+          frameBuilder: _fadeInFrame,
           errorBuilder: (_, __, ___) => _name(),
         ),
       );
@@ -720,6 +735,7 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
             colorBlendMode: BlendMode.srcIn,
             filterQuality: FilterQuality.medium,
             gaplessPlayback: true,
+            frameBuilder: _fadeInFrame,
             errorBuilder: (_, __, ___) => _name(),
           ),
         );

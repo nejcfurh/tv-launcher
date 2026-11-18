@@ -44,6 +44,9 @@ const kAppCardVerticalPadding = 9.0;
 const kLauncherSectionHorizontalPadding = 24.0;
 const kAppNameLabelHeight = 24.0;
 
+/// How long the loading placeholder takes to fade off a tile once its picture is ready.
+const kAppImageFadeDuration = Duration(milliseconds: 150);
+
 /// Row extent for a grid/dock line given the content width between section paddings.
 double appCardRowExtentFromContentWidth(double contentWidth, {int columnCount = Category.ColumnsCount}) {
   final slotWidth = contentWidth / columnCount;
@@ -255,6 +258,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                                     _handleFocusChange(context, focused);
                                   },
                                 ),
+                                _loadingCover(),
                                 if (_moving) ..._arrows(),
                                 if (dock)
                                   DockTileInnerBorder(tileRadius: cornerRadius)
@@ -332,9 +336,15 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
         type = AppImageType.Icon;
         bytes = await service.getAppIcon(widget.application.packageName);
       }
+      final image = ResizeImage(MemoryImage(bytes), width: 480);
+      // Decoded before it is shown, so the tile never sits empty between the placeholder and it. A
+      // decode that hangs only delays the picture; the placeholder still goes.
+      if (mounted) {
+        await precacheImage(image, context).timeout(const Duration(seconds: 2), onTimeout: () {});
+      }
       if (mounted) {
         setState(() {
-          _loadedImage = (type, ResizeImage(MemoryImage(bytes), width: 480));
+          _loadedImage = (type, image);
         });
       }
     } catch (_) {
@@ -392,23 +402,41 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
         ),
       );
     } else {
-      return Padding(
-        padding: EdgeInsets.all(8),
-        child: Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-                SizedBox(width: 8),
-                Text(AppLocalizations.of(context)!.loading),
-              ],
-            ),
-          ),
-        ),
-      );
+      return const SizedBox.expand();
     }
+  }
+
+  /// Covers the tile while its picture loads, then fades out over it and leaves the tree.
+  Widget _loadingCover() {
+    final loading = _loadedImage == null && !_imageLoadError;
+    return IgnorePointer(
+      child: AnimatedSwitcher(
+        duration: kAppImageFadeDuration,
+        switchOutCurve: Curves.easeOut,
+        child: !loading
+            ? const SizedBox.shrink()
+            : ColoredBox(
+                key: const Key('app_card_loading_cover'),
+                color: Theme.of(context).canvasColor,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                          const SizedBox(width: 8),
+                          Text(AppLocalizations.of(context)!.loading),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+      ),
+    );
   }
 
   void _focusHighlightModeChanged(FocusHighlightMode mode) {

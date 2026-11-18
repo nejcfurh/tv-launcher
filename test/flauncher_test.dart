@@ -37,6 +37,7 @@ import 'package:flauncher/widgets/apps_grid.dart';
 import 'package:flauncher/widgets/cached_blur_backdrop.dart';
 import 'package:flauncher/widgets/category_clean_row.dart';
 import 'package:flauncher/widgets/category_row.dart';
+import 'package:flauncher/widgets/app_card.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flauncher/widgets/settings/settings_panel_page.dart';
@@ -344,6 +345,76 @@ void main() {
     await tester.tap(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")));
     await tester.pump();
     verify(appsService.launchApp(browser));
+  });
+
+  testWidgets("A dock tile keeps its loading cover until its icon is in, then fades it off", (tester) async {
+    final appsService = mkAppService();
+    final mock = appsService as MockAppsService;
+    // No banner, so the tile loads the icon; the icon arrives when the test says so.
+    when(mock.getAppBanner(any)).thenAnswer((_) async => Uint8List(0));
+    final icon = Completer<Uint8List>();
+    final png = await mkAppService().getAppIcon("any");
+    when(mock.getAppIcon(any)).thenAnswer((_) => icon.future);
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final app = fakeApp(packageName: "me.efesser.flauncher", name: "FLauncher", version: "1.0.0");
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [app]),
+    ]);
+    await _pumpWidgetWith(tester, appsService);
+    final cover = find.descendant(
+      of: findAppCard(app.packageName),
+      matching: find.byKey(const Key('app_card_loading_cover')),
+    );
+    Iterable<double> coverOpacity() => tester
+        .widgetList<FadeTransition>(find.ancestor(of: cover, matching: find.byType(FadeTransition)))
+        .map((transition) => transition.opacity.value);
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(cover, findsOneWidget, reason: 'no icon yet');
+    expect(coverOpacity(), everyElement(1.0));
+
+    icon.complete(png);
+    for (var i = 0; i < 50 && coverOpacity().every((opacity) => opacity == 1); i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(coverOpacity(), contains(inExclusiveRange(0, 1)), reason: 'fading out');
+    await tester.pump(kAppImageFadeDuration);
+    expect(cover, findsNothing);
+  });
+
+  testWidgets("The dock stays on the bottom edge in the frame the Watch Next hero appears", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = List.generate(
+      5,
+      (i) => fakeApp(packageName: "me.efesser.flauncher.$i", name: "FLauncher $i", version: "1.0.0"),
+    );
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+    final settingsService = mkSettingsService();
+    when(settingsService.showWatchNextSection).thenReturn(true);
+    when(settingsService.watchNextBigPictureMode).thenReturn(true);
+    // Permission granted, items not loaded yet: what the home screen shows first after a cold start.
+    final watchNextService = mkWatchNextService();
+    when(watchNextService.hasPermission).thenReturn(true);
+
+    await _pumpWidgetWithProviders(tester, mkWallpaperService(), appsService, settingsService, watchNextService);
+    await tester.pumpAndSettle();
+    final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final tray = find.byKey(const Key("dock_tray"));
+    expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+
+    // The items arrive.
+    final item = WatchNextItem(id: 1, title: "The Office", posterUri: "content://poster/1");
+    when(watchNextService.items).thenReturn([item]);
+    when(watchNextService.hasItems).thenReturn(true);
+    when(watchNextService.hasVisibleSection).thenReturn(true);
+    when(watchNextService.activeHeroItem).thenReturn(item);
+    tester.element(find.byType(FLauncher)).markNeedsBuild();
+    await tester.pump();
+
+    expect(find.text("The Office"), findsWidgets, reason: 'the hero is on screen in this frame');
+    expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
   });
 
   testWidgets("A prepared hero backdrop starts its transition in the frame the hero item changes", (tester) async {
