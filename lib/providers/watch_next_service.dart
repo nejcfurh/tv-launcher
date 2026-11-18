@@ -340,6 +340,7 @@ class WatchNextService extends ChangeNotifier {
 
       if (imageBytes != null && imageBytes.isNotEmpty) {
         _posterCache[uri] = imageBytes;
+        unawaited(_logPosterSize(uri, imageBytes));
         _failedPosters.remove(uri);
         _schedulePosterCacheNotification();
       } else {
@@ -361,6 +362,20 @@ class WatchNextService extends ChangeNotifier {
       }
     } finally {
       _loadingPosters.remove(uri);
+    }
+  }
+
+  /// Logs the pixel size each app's artwork arrives at, to judge the backdrop resolution. Reads
+  /// the image header only.
+  Future<void> _logPosterSize(String uri, Uint8List bytes) async {
+    try {
+      final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      final descriptor = await ui.ImageDescriptor.encoded(buffer);
+      debugPrint('Watch Next poster ${descriptor.width}x${descriptor.height}, ${bytes.length} bytes: $uri');
+      descriptor.dispose();
+      buffer.dispose();
+    } catch (_) {
+      debugPrint('Watch Next poster not decodable, ${bytes.length} bytes: $uri');
     }
   }
 

@@ -932,6 +932,15 @@ public class MainActivity extends FlutterActivity {
                                 ? new ArrayList<>(Arrays.asList(TvContract.Programs.Genres.decode(genres)))
                                 : null);
 
+                            // What each app publishes as artwork, to judge the backdrop resolution.
+                            // Aspect ratios are TvContract constants: 0 16:9, 1 3:2, 2 4:3, 3 1:1,
+                            // 4 2:3, 5 movie poster.
+                            android.util.Log.i("MainActivity", "Watch Next artwork: package=" + item.get("packageName")
+                                + " posterAspect=" + readInteger(cursor, TvContract.WatchNextPrograms.COLUMN_POSTER_ART_ASPECT_RATIO)
+                                + " thumbnailAspect=" + readInteger(cursor, TvContract.WatchNextPrograms.COLUMN_THUMBNAIL_ASPECT_RATIO)
+                                + " poster=" + readNonBlankString(cursor, TvContract.WatchNextPrograms.COLUMN_POSTER_ART_URI)
+                                + " thumbnail=" + readNonBlankString(cursor, TvContract.WatchNextPrograms.COLUMN_THUMBNAIL_URI));
+
                             items.add(item);
                             count++;
                         } catch (Exception rowEx) {
@@ -956,7 +965,9 @@ public class MainActivity extends FlutterActivity {
         TvContract.WatchNextPrograms.COLUMN_LAST_PLAYBACK_POSITION_MILLIS,
         TvContract.WatchNextPrograms.COLUMN_CANONICAL_GENRE,
         TvContract.WatchNextPrograms.COLUMN_RELEASE_DATE,
-        TvContract.WatchNextPrograms.COLUMN_TYPE
+        TvContract.WatchNextPrograms.COLUMN_TYPE,
+        TvContract.WatchNextPrograms.COLUMN_POSTER_ART_ASPECT_RATIO,
+        TvContract.WatchNextPrograms.COLUMN_THUMBNAIL_ASPECT_RATIO
     };
 
     /**
