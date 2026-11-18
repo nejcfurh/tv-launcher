@@ -42,6 +42,7 @@
 
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <queries>
         <intent>
@@ -107,6 +108,15 @@
                 android:name="android.service.dream"
                 android:resource="@xml/screensaver" />
         </service>
+
+        <receiver
+            android:name=".EarlyStartReceiver"
+            android:directBootAware="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".HomeButtonService"
