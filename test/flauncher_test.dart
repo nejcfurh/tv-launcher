@@ -36,6 +36,7 @@ import 'package:flauncher/widgets/apps_grid.dart';
 import 'package:flauncher/widgets/cached_blur_backdrop.dart';
 import 'package:flauncher/widgets/category_clean_row.dart';
 import 'package:flauncher/widgets/category_row.dart';
+import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flauncher/widgets/settings/settings_panel_page.dart';
 import 'package:flutter/material.dart';
@@ -325,11 +326,13 @@ void main() {
 
     expect(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), findsOneWidget);
     expect(find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), findsNothing);
-    // All shortcuts are mono glyphs: a shopping bag for the Play Store, a globe for whichever browser is installed.
+    // The Play Store shows its own icon in grayscale; the browser is a globe glyph.
+    expect(_grayscaleAppIcon("com.android.vending"), findsOneWidget);
     expect(
       find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.android.vending")), matching: find.byIcon(Icons.shop_outlined)),
-      findsOneWidget,
+      findsNothing,
     );
+    verify(appsService.getAppIcon("com.android.vending"));
     expect(
       find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), matching: find.byIcon(Icons.public)),
       findsOneWidget,
@@ -340,7 +343,7 @@ void main() {
     verify(appsService.launchApp(browser));
   });
 
-  testWidgets("Router HDD shortcut shows the bare VLC cone, tinted white", (tester) async {
+  testWidgets("Router HDD shortcut shows VLC's own icon in grayscale", (tester) async {
     final appsService = mkAppService();
     final vlc = fakeApp(packageName: "org.videolan.vlc", name: "VLC", version: "1.0.0");
     when(appsService.categoriesWithApps).thenReturn([]);
@@ -349,14 +352,16 @@ void main() {
     await _pumpWidgetWith(tester, appsService);
     await tester.pump();
 
+    expect(_grayscaleAppIcon("org.videolan.vlc"), findsOneWidget);
     expect(
-      find.descendant(
-        of: find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")),
-        matching: find.byWidgetPredicate(
-            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/vlc_cone.png' &&
-                w.color == const Color(0xCCFFFFFF) && w.colorBlendMode == BlendMode.srcIn),
-      ),
+      find.descendant(of: find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), matching: find.byType(Image)),
       findsOneWidget,
+    );
+    verify(appsService.getAppIcon("org.videolan.vlc"));
+    // Same size as the settings and network glyphs.
+    expect(
+      tester.getSize(find.descendant(of: find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), matching: find.byType(Image))),
+      const Size(18, 18),
     );
   });
 
@@ -893,6 +898,17 @@ WallpaperService mkWallpaperService([bool wallpaper = true]) {
   when(wallpaperService.redditWallpaperCredit).thenReturn(null);
   return wallpaperService;
 }
+
+/// An app's launcher icon (from [AppsService.getAppIcon]) under the grayscale filter, inside the
+/// top bar shortcut for [packageName].
+Finder _grayscaleAppIcon(String packageName) => find.descendant(
+      of: find.byKey(Key("top_bar_shortcut_$packageName")),
+      matching: find.byWidgetPredicate((w) =>
+          w is ColorFiltered &&
+          w.colorFilter == kTopBarGrayscale &&
+          w.child is Image &&
+          (w.child as Image).image is MemoryImage),
+    );
 
 AppsService mkAppService() {
   final appsService = MockAppsService();

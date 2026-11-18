@@ -230,37 +230,26 @@ const TextStyle _kTimeTextStyle = TextStyle(
 );
 
 /// Apps opened from the top bar instead of the dock. Each shortcut opens the first of its
-/// packages that is installed, and is hidden when none is. It shows [asset] when set, else the
-/// app's own icon with [useAppIcon], else [icon] in the style of the settings and network icons.
-const List<({List<String> packageNames, IconData icon, bool useAppIcon, String? asset, String label})>
-    kTopBarShortcuts = [
-  (packageNames: ['com.android.vending'], icon: Icons.shop_outlined, useAppIcon: false, asset: null, label: 'Play Store'),
-  (
-    packageNames: ['com.phlox.tvwebbrowser', 'com.tcl.browser'],
-    icon: Icons.public,
-    useAppIcon: false,
-    asset: null,
-    label: 'Browser',
-  ),
-  // VLC's own icon is the cone on an orange square; the bare cone matches the other top bar icons.
-  (packageNames: ['org.videolan.vlc'], icon: Icons.dns_outlined, useAppIcon: false, asset: 'assets/vlc_cone.png', label: 'Router HDD'),
+/// packages that is installed, and is hidden when none is. It shows the app's own icon in
+/// grayscale with [useAppIcon], else [icon] in the style of the settings and network icons.
+const List<({List<String> packageNames, IconData icon, bool useAppIcon, String label})> kTopBarShortcuts = [
+  (packageNames: ['com.android.vending'], icon: Icons.shop_outlined, useAppIcon: true, label: 'Play Store'),
+  (packageNames: ['com.phlox.tvwebbrowser', 'com.tcl.browser'], icon: Icons.public, useAppIcon: false, label: 'Browser'),
+  (packageNames: ['org.videolan.vlc'], icon: Icons.dns_outlined, useAppIcon: true, label: 'Router HDD'),
 ];
+
+/// Rec. 709 luma weights: app icons keep their shapes and shading but lose their colour, so they
+/// sit with the white glyphs around them.
+const ColorFilter kTopBarGrayscale = ColorFilter.matrix([
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0.2126, 0.7152, 0.0722, 0, 0, //
+  0, 0, 0, 1, 0, //
+]);
 
 Widget _barIcon(IconData icon) => Icon(icon, size: _kTopBarIconSize, color: _kTopBarIconColor);
 
-Widget _shortcutIcon(({List<String> packageNames, IconData icon, bool useAppIcon, String? asset, String label}) shortcut, App app) {
-  final asset = shortcut.asset;
-  if (asset != null) {
-    // Tinted like the glyphs around it.
-    return Image.asset(
-      asset,
-      width: _kTopBarIconSize,
-      height: _kTopBarIconSize,
-      color: _kTopBarIconColor,
-      colorBlendMode: BlendMode.srcIn,
-      filterQuality: FilterQuality.medium,
-    );
-  }
+Widget _shortcutIcon(({List<String> packageNames, IconData icon, bool useAppIcon, String label}) shortcut, App app) {
   if (shortcut.useAppIcon) {
     return _ShortcutIcon(packageName: app.packageName, fallback: shortcut.icon);
   }
@@ -297,7 +286,7 @@ class _AppShortcuts extends StatelessWidget {
   }
 }
 
-/// The app's own launcher icon, or [fallback] while it loads or when the app has none.
+/// The app's own launcher icon in grayscale, or [fallback] while it loads or when the app has none.
 class _ShortcutIcon extends StatefulWidget {
   final String packageName;
   final IconData fallback;
@@ -324,12 +313,15 @@ class _ShortcutIconState extends State<_ShortcutIcon> {
           if (bytes == null || bytes.isEmpty) {
             return Center(child: fallback);
           }
-          return Image.memory(
-            bytes,
-            width: _size,
-            height: _size,
-            filterQuality: FilterQuality.medium,
-            errorBuilder: (_, __, ___) => Center(child: fallback),
+          return ColorFiltered(
+            colorFilter: kTopBarGrayscale,
+            child: Image.memory(
+              bytes,
+              width: _size,
+              height: _size,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (_, __, ___) => Center(child: fallback),
+            ),
           );
         },
       ),
