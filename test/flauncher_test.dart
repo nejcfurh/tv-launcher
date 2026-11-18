@@ -230,6 +230,16 @@ void main() {
     expect(find.byKey(Key("background")), findsOneWidget);
   });
 
+  testWidgets("Wallpaper gets the top and bottom scrims", (tester) async {
+    final appsService = mkAppService();
+    when(appsService.categoriesWithApps).thenReturn([]);
+
+    await _pumpWidgetWith(tester, appsService);
+
+    expect(find.byKey(const Key("wallpaper_scrim")), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key("wallpaper_scrim"))), tester.view.physicalSize / tester.view.devicePixelRatio);
+  });
+
   testWidgets("Default build credits the Unsplash photographer", (tester) async {
     final appsService = mkAppService();
     when(appsService.categoriesWithApps).thenReturn([]);

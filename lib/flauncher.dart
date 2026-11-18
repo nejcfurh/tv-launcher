@@ -134,7 +134,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                       duration: const Duration(milliseconds: 1500),
                       child: hasHeroBackdrop
                           ? const SizedBox.shrink(key: ValueKey('occluded_wallpaper'))
-                          : _wallpaper(context, wallpaperService),
+                          : _scrimmedWallpaper(_wallpaper(context, wallpaperService)),
                     ),
                     // Hero items crossfade once baked simultaneously with dock blur.
                     AnimatedSwitcher(
@@ -658,6 +658,22 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     );
   }
 
+  /// The wallpaper with the same top and bottom scrims as the hero backdrop, crossfading as one.
+  Widget _scrimmedWallpaper(Widget wallpaper) => Stack(
+    key: ValueKey(('scrimmed_wallpaper', wallpaper.key)),
+    children: [
+      wallpaper,
+      const Positioned.fill(
+        child: IgnorePointer(
+          child: CustomPaint(
+            key: Key("wallpaper_scrim"),
+            painter: _CinematicScrimPainter(leftScrim: false),
+          ),
+        ),
+      ),
+    ],
+  );
+
   Widget _wallpaper(BuildContext context, WallpaperService wallpaperService) {
     final screenSize = MediaQuery.sizeOf(context);
     final dpr = MediaQuery.devicePixelRatioOf(context);
@@ -879,7 +895,13 @@ class _HeroBackdropBaker extends ChangeNotifier {
         // 1. Full-screen hero background with cinematic scrim
         final heroRecorder = ui.PictureRecorder();
         final heroCanvas = Canvas(heroRecorder);
-        paintImage(canvas: heroCanvas, rect: Offset.zero & pxSize, image: source, fit: BoxFit.cover);
+        paintImage(
+          canvas: heroCanvas,
+          rect: Offset.zero & pxSize,
+          image: source,
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+        );
         const _CinematicScrimPainter().paint(heroCanvas, pxSize);
         final heroPicture = heroRecorder.endRecording();
         final heroImage = heroPicture.toImageSync(pxSize.width.toInt(), pxSize.height.toInt());
@@ -902,7 +924,14 @@ class _HeroBackdropBaker extends ChangeNotifier {
             tileMode: TileMode.clamp,
           );
         gridCanvas.saveLayer(blurRect, gridPaint);
-        paintImage(canvas: gridCanvas, rect: blurRect, image: source, fit: BoxFit.cover, filterQuality: FilterQuality.low);
+        paintImage(
+          canvas: gridCanvas,
+          rect: blurRect,
+          image: source,
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+          filterQuality: FilterQuality.low,
+        );
         // Blur the scrimmed hero (what is actually on screen), otherwise the blur looks much brighter.
         const _CinematicScrimPainter().paint(gridCanvas, blurRect.size);
         gridCanvas.restore();
@@ -950,43 +979,53 @@ class _HeroBackdropBaker extends ChangeNotifier {
   }
 }
 
+/// Scrims over the home background. The left one only goes behind the hero text; top and bottom
+/// keep the top bar and the dock readable on any picture.
 class _CinematicScrimPainter extends CustomPainter {
-  const _CinematicScrimPainter();
+  final bool leftScrim;
+
+  const _CinematicScrimPainter({this.leftScrim = true});
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    // Top-to-bottom cinematic scrim
-    final vPaint = Paint()
-      ..shader = ui.Gradient.linear(
-        Offset.zero,
-        Offset(0, size.height),
-        const [
-          Color(0x59000000), // 0.35
-          Colors.transparent,
-          Color(0x80000000), // 0.50
-          Color(0xE0000000), // 0.88
-        ],
-        const [0.0, 0.25, 0.65, 1.0],
+    if (leftScrim) {
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..shader = ui.Gradient.linear(
+            Offset(0, size.height / 2),
+            Offset(size.width, size.height / 2),
+            const [Color(0xD9000000), Color(0xD9000000), Colors.transparent], // 0.85, 0.85, 0
+            const [0.0, 0.25, 0.6],
+          ),
       );
-    canvas.drawRect(rect, vPaint);
-
-    // Left-to-right cinematic scrim
-    final hPaint = Paint()
-      ..shader = ui.Gradient.linear(
-        Offset(0, size.height / 2),
-        Offset(size.width, size.height / 2),
-        const [
-          Color(0xA6000000), // 0.65
-          Color(0x40000000), // 0.25
-          Colors.transparent,
-        ],
-        const [0.0, 0.35, 0.7],
-      );
-    canvas.drawRect(rect, hPaint);
+    }
+    // Bottom: 50% black at the bottom edge, gone at 35% of the height measured from the bottom.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(0, size.height),
+          Offset.zero,
+          const [Color(0x80000000), Colors.transparent],
+          const [0.0, 0.35],
+        ),
+    );
+    // Top: 45% black at the top edge, gone at 15% of the height.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          Offset.zero,
+          Offset(0, size.height),
+          const [Color(0x73000000), Colors.transparent],
+          const [0.0, 0.15],
+        ),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _CinematicScrimPainter oldDelegate) => oldDelegate.leftScrim != leftScrim;
 }
 
