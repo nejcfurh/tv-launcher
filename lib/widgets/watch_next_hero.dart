@@ -198,6 +198,9 @@ class _WatchNextHeroState extends State<WatchNextHero> {
                       duration: kHeroCarouselDuration,
                       curve: Curves.easeOutCubic,
                       alignment: Alignment.topLeft,
+                      // The leaving text slides past the left keyline while it fades; a clip here
+                      // would cut it off along x = 48 before it is gone.
+                      clipBehavior: Clip.none,
                       child: AnimatedSwitcher(
                         duration: kHeroCarouselDuration,
                         layoutBuilder: (current, previous) =>

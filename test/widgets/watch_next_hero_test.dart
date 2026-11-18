@@ -443,6 +443,58 @@ void main() {
       expect(opacityOf('Ted Lasso'), 1);
     });
 
+    testWidgets('the leaving text is not cut off at the left keyline while it slides away', (tester) async {
+      // The next item is larger, so the hero grows while the old title slides out.
+      watchNextService.testItems = [
+        sampleItems[0],
+        WatchNextItem(
+          id: 3,
+          title: 'Ted Lasso: The Complete Series',
+          packageName: 'com.netflix.ninja',
+          seasonNumber: '3',
+          episodeNumber: '12',
+          genres: const ['COMEDY'],
+          releaseDate: '2023',
+          playbackPositionMillis: 600000,
+          duration: 1800000,
+          progressPercent: 33,
+        ),
+      ];
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+      final keyline = tester.getTopLeft(find.byType(WatchNextHero)).dx + 48;
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // The old title is still showing and has moved left of the keyline.
+      final title = find.text('Severance');
+      final titleRect = tester.getRect(title);
+      expect(titleRect.left, lessThan(keyline - 2));
+
+      // Its pixels left of the keyline are drawn, not cut off while the hero resizes to the new item.
+      RenderObject node = tester.renderObject(find.byType(WatchNextHero));
+      while (!node.isRepaintBoundary) {
+        node = node.parent!;
+      }
+      final boundary = node as RenderBox;
+      final origin = boundary.localToGlobal(Offset.zero);
+      final bytes = await tester.runAsync(() async {
+        final image = await (boundary.debugLayer! as OffsetLayer).toImage(Offset.zero & boundary.size);
+        return (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+      });
+      final width = boundary.size.width.round();
+      int pixelAt(double x, double y) =>
+          bytes!.getUint32((((y - origin.dy).round()) * width + (x - origin.dx).round()) * 4);
+      final y = titleRect.center.dy;
+      // Ink is anything that differs from the background at the screen edge, in the same row.
+      final background = pixelAt(origin.dx + 1, y);
+      // Control: the detector sees the title right of the keyline.
+      expect(pixelAt(keyline + 4, y), isNot(background));
+      expect(pixelAt(keyline - 1, y), isNot(background), reason: 'title cut off at the keyline');
+    });
+
     test('every bundled source logo exists', () {
       for (final logo in kSourceAppLogoAssets.values) {
         expect(File(logo.asset).existsSync(), isTrue, reason: logo.asset);
