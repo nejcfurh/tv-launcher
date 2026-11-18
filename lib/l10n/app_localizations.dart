@@ -824,6 +824,36 @@ abstract class AppLocalizations {
   /// **'Watch Next on'**
   String get watchNextOn;
 
+  /// No description provided for @watchNextSeason.
+  ///
+  /// In en, this message translates to:
+  /// **'Season {season}'**
+  String watchNextSeason(String season);
+
+  /// No description provided for @watchNextEpisode.
+  ///
+  /// In en, this message translates to:
+  /// **'Episode {episode}'**
+  String watchNextEpisode(String episode);
+
+  /// Time left to watch, e.g. 9 min left
+  ///
+  /// In en, this message translates to:
+  /// **'{time} left'**
+  String watchNextTimeLeft(String time);
+
+  /// No description provided for @durationHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours} h'**
+  String durationHours(int hours);
+
+  /// No description provided for @durationMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes} min'**
+  String durationMinutes(int minutes);
+
   /// No description provided for @dockAllApps.
   ///
   /// In en, this message translates to:

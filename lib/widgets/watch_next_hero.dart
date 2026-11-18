@@ -24,7 +24,7 @@ import 'package:flauncher/models/watch_next_item.dart';
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/providers/watch_next_service.dart';
-import 'package:flauncher/widgets/app_card.dart';
+import 'package:flauncher/widgets/watch_next_hero_metadata.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -39,7 +39,15 @@ void _playFocusSound(BuildContext context) {
   }
 }
 
-const double _kWatchNextHeroHorizontalPadding = kLauncherSectionHorizontalPadding + kAppCardHorizontalPadding;
+/// The hero text starts on the content keyline (x = 48), like the top bar and the dock tiles.
+const double _kWatchNextHeroHorizontalPadding = 48;
+
+/// From the top of the service row to the bottom of the Watch button, with every row present
+/// (y = 226 to 405 on a 540 dp tall screen). Rows that are missing leave space at the bottom
+/// instead of moving the hero, so the dock below never shifts.
+const double kWatchNextHeroHeight = 179;
+
+const double _kWatchButtonHeight = 36;
 
 class WatchNextHero extends StatelessWidget {
   final List<WatchNextItem> items;
@@ -74,154 +82,153 @@ class WatchNextHero extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: _kWatchNextHeroHorizontalPadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _HeroInfo(
-            sourceBadge: sourceBadge,
-            sourcePackageName: app?.packageName,
-            sourceAppName: appName,
-            title: activeItem.title,
-            description: activeItem.description?.trim(),
-            progressPercent: activeItem.progressPercent,
-          ),
-          const SizedBox(height: 14),
-
-          // Action Button and Carousel indicators
-          Row(
+      child: SizedBox(
+        height: kWatchNextHeroHeight,
+        // Rows are anchored at the top and keep their natural height; a large font scale spills
+        // past the box instead of failing layout.
+        child: OverflowBox(
+          alignment: Alignment.topLeft,
+          maxHeight: double.infinity,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _HeroWatchButton(
+              _HeroInfo(
+                sourceBadge: sourceBadge,
+                sourcePackageName: app?.packageName,
+                sourceAppName: appName,
                 item: activeItem,
-                autofocus: isFirstSection,
-                handleUpNavigationToSettings: handleUpNavigationToSettings,
-                onItemFocused: onItemFocused,
-                onPrev: watchNextService.prevHeroItem,
-                onNext: watchNextService.nextHeroItem,
-                totalItems: items.length,
               ),
-              if (items.length > 1) ...[
-                const SizedBox(width: 20),
-                _HeroPaginationIndicator(currentIndex: activeIndex, totalItems: items.length),
-              ],
+
+              // Action Button and Carousel indicators
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  _HeroWatchButton(
+                    item: activeItem,
+                    autofocus: isFirstSection,
+                    handleUpNavigationToSettings: handleUpNavigationToSettings,
+                    onItemFocused: onItemFocused,
+                    onPrev: watchNextService.prevHeroItem,
+                    onNext: watchNextService.nextHeroItem,
+                    totalItems: items.length,
+                  ),
+                  if (items.length > 1) ...[
+                    const SizedBox(width: 20),
+                    _HeroPaginationIndicator(currentIndex: activeIndex, totalItems: items.length),
+                  ],
+                ],
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-        ],
+        ),
       ),
     );
   }
 }
 
-const _kBadgeTextStyle = TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1);
+const _kBadgeTextStyle = TextStyle(
+  color: Color(0xD9FFFFFF), // 85% white
+  fontSize: 11,
+  fontWeight: FontWeight.w700,
+  letterSpacing: 1.25,
+);
 
+const _kTitleTextStyle = TextStyle(
+  color: Colors.white,
+  fontSize: 36,
+  fontWeight: FontWeight.w700,
+  height: 1.1,
+  letterSpacing: -0.25,
+  shadows: [Shadow(color: Color(0x66000000), offset: Offset(0, 1), blurRadius: 6)],
+);
+
+const _kMeta1TextStyle = TextStyle(color: Color(0xEBFFFFFF), fontSize: 15, fontWeight: FontWeight.w500); // 92%
+const _kMeta2TextStyle = TextStyle(color: Color(0xA6FFFFFF), fontSize: 12); // 65% white
+
+/// Service, title, metadata rows and progress. Missing rows are removed, and the rows below move
+/// up. There is no synopsis.
 class _HeroInfo extends StatelessWidget {
   final String sourceBadge;
   final String? sourcePackageName;
   final String? sourceAppName;
-  final String title;
-  final String? description;
-  final int? progressPercent;
+  final WatchNextItem item;
 
-  const _HeroInfo({
-    required this.sourceBadge,
-    this.sourcePackageName,
-    this.sourceAppName,
-    required this.title,
-    required this.description,
-    required this.progressPercent,
-  });
+  const _HeroInfo({required this.sourceBadge, this.sourcePackageName, this.sourceAppName, required this.item});
 
   @override
   Widget build(BuildContext context) {
-    final hasDescription = description != null && description!.isNotEmpty;
-    final hasProgress = progressPercent != null && progressPercent! > 0;
+    final meta = heroMetadata(item, AppLocalizations.of(context)!);
+    final metaRows = [
+      if (meta.line1 case final line1?)
+        Text(
+          line1,
+          key: const Key('hero_meta_1'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _kMeta1TextStyle,
+        ),
+      if (meta.line2 case final line2?)
+        Text(
+          line2,
+          key: const Key('hero_meta_2'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _kMeta2TextStyle,
+        ),
+    ];
+    final progressPercent = item.progressPercent;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Source badge
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.16),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
-          ),
-          // Fixed height, so items with a logo and items with only text line up the same.
-          child: SizedBox(
-            height: 18,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(sourceBadge, maxLines: 1, style: _kBadgeTextStyle),
-                if (sourcePackageName != null)
-                  _SourceAppIcon(packageName: sourcePackageName!, appName: sourceAppName ?? ''),
-              ],
-            ),
+        // Service: plain text and logo; no border or fill, so it does not look focusable.
+        // Fixed height, so items with a logo and items with only text line up the same.
+        SizedBox(
+          key: const Key('hero_service_row'),
+          height: 18,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(sourceBadge, maxLines: 1, style: _kBadgeTextStyle),
+              if (sourcePackageName != null)
+                _SourceAppIcon(packageName: sourcePackageName!, appName: sourceAppName ?? ''),
+            ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 11),
 
-        // Title
         Text(
-          title,
+          item.title,
+          key: const Key('hero_title'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 34,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.4,
-            shadows: [Shadow(color: Colors.black87, offset: Offset(0, 2), blurRadius: 10)],
+          style: _kTitleTextStyle,
+        ),
+
+        for (final (index, row) in metaRows.indexed) ...[SizedBox(height: index == 0 ? 11.4 : 4.4), row],
+
+        const SizedBox(height: 11),
+        // Only when the app reported a playback position.
+        if (progressPercent != null) ...[
+          Container(
+            key: const Key('hero_progress'),
+            width: 160,
+            height: 2,
+            decoration: BoxDecoration(color: const Color(0x4DFFFFFF), borderRadius: BorderRadius.circular(1)),
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: (progressPercent / 100).clamp(0.0, 1.0),
+              child: Container(
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(1)),
+              ),
+            ),
           ),
-        ),
-
-        // Fixed-height synopsis slot (reserves exact height for 2 lines)
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 40,
-          child: hasDescription
-              ? ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
-                  child: Text(
-                    description!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 14,
-                      height: 1.35,
-                      shadows: const [Shadow(color: Colors.black87, offset: Offset(0, 1), blurRadius: 6)],
-                    ),
-                  ),
-                )
-              : null,
-        ),
-
-        // Fixed-height progress slot (reserves exact height whether in progress or not)
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 4,
-          child: hasProgress
-              ? Container(
-                  width: 140,
-                  height: 4,
-                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: (progressPercent! / 100).clamp(0.0, 1.0),
-                    child: Container(
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
-                    ),
-                  ),
-                )
-              : null,
-        ),
+          const SizedBox(height: 14),
+        ],
       ],
     );
   }
@@ -350,7 +357,7 @@ class _HeroWatchButtonState extends State<_HeroWatchButton> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOutCubic,
-              height: 48,
+              height: _kWatchButtonHeight,
               alignment: Alignment.center,
               padding: const EdgeInsets.symmetric(horizontal: 24),
               decoration: ShapeDecoration(

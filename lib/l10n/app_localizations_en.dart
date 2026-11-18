@@ -394,6 +394,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get watchNextOn => 'Watch Next on';
 
   @override
+  String watchNextSeason(String season) {
+    return 'Season $season';
+  }
+
+  @override
+  String watchNextEpisode(String episode) {
+    return 'Episode $episode';
+  }
+
+  @override
+  String watchNextTimeLeft(String time) {
+    return '$time left';
+  }
+
+  @override
+  String durationHours(int hours) {
+    return '$hours h';
+  }
+
+  @override
+  String durationMinutes(int minutes) {
+    return '$minutes min';
+  }
+
+  @override
   String get dockAllApps => 'All apps';
 
   @override

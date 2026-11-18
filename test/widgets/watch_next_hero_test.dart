@@ -203,12 +203,12 @@ void main() {
       );
     }
 
-    testWidgets('renders title, description, badge, and Resume button', (tester) async {
+    testWidgets('renders title and badge, and never the synopsis', (tester) async {
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
 
       expect(find.text('Severance'), findsOneWidget);
-      expect(find.textContaining('Mark leads a team'), findsOneWidget);
+      expect(find.textContaining('Mark leads a team'), findsNothing);
       expect(find.text('WATCH NEXT ON'), findsOneWidget);
       expect(find.text('Resume'), findsOneWidget);
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
@@ -261,8 +261,7 @@ void main() {
     testWidgets('badge keeps the same height with a logo and with only a name', (tester) async {
       Future<double> badgeHeight() async {
         await tester.pumpAndSettle();
-        final badge = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Container)).first;
-        return tester.getSize(badge).height;
+        return tester.getSize(find.byKey(const Key('hero_service_row'))).height;
       }
 
       await tester.pumpWidget(createTestWidget());
@@ -274,6 +273,82 @@ void main() {
       final withName = await badgeHeight();
 
       expect(withName, withLogo);
+    });
+
+    testWidgets('service row has no border or fill', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.ancestor(
+          of: find.text('WATCH NEXT ON'),
+          matching: find.byWidgetPredicate((w) => w is Container && w.decoration != null),
+        ),
+        findsNothing,
+      );
+    });
+
+    final fullSeriesItem = WatchNextItem(
+      id: 10,
+      title: 'The Office (U.S.)',
+      packageName: 'com.netflix.ninja',
+      programType: kWatchNextTypeTvEpisode,
+      seasonNumber: '5',
+      episodeNumber: '12',
+      duration: 22 * 60000,
+      playbackPositionMillis: 13 * 60000,
+      progressPercent: 59,
+      genres: const ['COMEDY'],
+    );
+
+    testWidgets('series shows season, episode, time left, genre and progress', (tester) async {
+      watchNextService.testItems = [fullSeriesItem];
+      await tester.pumpWidget(createTestWidget(items: [fullSeriesItem]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Season 5 · Episode 12 · 9 min left'), findsOneWidget);
+      expect(find.text('Comedy'), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('hero_progress'))), const Size(160, 2));
+    });
+
+    testWidgets('missing rows are removed and the Watch button moves up', (tester) async {
+      watchNextService.testItems = [fullSeriesItem];
+      await tester.pumpWidget(createTestWidget(items: [fullSeriesItem]));
+      await tester.pumpAndSettle();
+      final fullButtonTop = tester.getTopLeft(find.text('Resume')).dy;
+      final heroHeight = tester.getSize(find.byType(WatchNextHero)).height;
+
+      final bare = WatchNextItem(id: 11, title: 'Bare item', packageName: 'com.netflix.ninja', description: 'A synopsis');
+      watchNextService.testItems = [bare];
+      await tester.pumpWidget(createTestWidget(items: [bare]));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('hero_meta_1')), findsNothing);
+      expect(find.byKey(const Key('hero_meta_2')), findsNothing);
+      expect(find.byKey(const Key('hero_progress')), findsNothing);
+      expect(find.text('A synopsis'), findsNothing);
+      expect(tester.getTopLeft(find.text('Watch')).dy, lessThan(fullButtonTop));
+      // The hero keeps its height, so the dock below does not move.
+      expect(tester.getSize(find.byType(WatchNextHero)).height, heroHeight);
+    });
+
+    testWidgets('no playback position: no progress bar and no time left', (tester) async {
+      final noPosition = WatchNextItem(
+        id: 12,
+        title: 'The Office (U.S.)',
+        packageName: 'com.netflix.ninja',
+        programType: kWatchNextTypeTvEpisode,
+        seasonNumber: '5',
+        episodeNumber: '12',
+        duration: 22 * 60000,
+      );
+      watchNextService.testItems = [noPosition];
+      await tester.pumpWidget(createTestWidget(items: [noPosition]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Season 5 · Episode 12'), findsOneWidget);
+      expect(find.textContaining('left'), findsNothing);
+      expect(find.byKey(const Key('hero_progress')), findsNothing);
     });
 
     test('every bundled source logo exists', () {
@@ -323,14 +398,14 @@ void main() {
       final buttonFinder = find.byType(AnimatedContainer);
       expect(buttonFinder, findsWidgets);
 
-      // Find the AnimatedContainer corresponding to the button (the one with height 48)
+      // Find the AnimatedContainer corresponding to the button (the one with height 36)
       final watchButtonContainer = tester.widget<AnimatedContainer>(
         find.ancestor(
           of: find.text('Resume'),
           matching: find.byType(AnimatedContainer),
         ),
       );
-      expect(watchButtonContainer.constraints?.maxHeight ?? 48.0, 48.0);
+      expect(watchButtonContainer.constraints?.maxHeight, 36.0);
 
       final initialSize = tester.getSize(
         find.ancestor(

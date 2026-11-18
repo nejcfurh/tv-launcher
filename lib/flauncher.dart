@@ -303,7 +303,9 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
 
     if (favoriteApps.isEmpty && otherSections.isEmpty) return _emptyState(context);
 
-    final watchNextSpace = watchNextBigPicture ? 385 : 410;
+    // Big picture: puts the hero's top at y = 226 on a 540 dp tall screen; the dock anchoring below
+    // corrects any difference.
+    final watchNextSpace = watchNextBigPicture ? 314 : 410;
 
     if (favoriteApps.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _anchorDockToBottom());

@@ -460,29 +460,6 @@ class WatchNextService extends ChangeNotifier {
     const titleY = 175.0;
     titlePainter.paint(canvas, Offset(titleX, titleY));
 
-    // Program description
-    if (item.description != null && item.description!.trim().isNotEmpty) {
-      final descSpan = TextSpan(
-        text: item.description!.trim(),
-        style: const TextStyle(
-          color: Color(0x88FFFFFF),
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
-        ),
-      );
-      final descPainter = TextPainter(
-        text: descSpan,
-        textAlign: TextAlign.center,
-        textDirection: TextDirection.ltr,
-        maxLines: 1,
-        ellipsis: '...',
-      )..layout(maxWidth: width - 100);
-
-      final descX = (width - descPainter.width) / 2;
-      final descY = titleY + titlePainter.height + 8;
-      descPainter.paint(canvas, Offset(descX, descY));
-    }
-
     // Subtle edge border
     final borderPaint = Paint()
       ..color = const Color(0x18FFFFFF)
