@@ -35,7 +35,6 @@ import 'package:flauncher/widgets/app_card.dart';
 import 'package:flauncher/widgets/cached_blur_backdrop.dart';
 import 'package:flauncher/widgets/category_clean_row.dart';
 import 'package:flauncher/widgets/category_row.dart';
-import 'package:flauncher/widgets/dock_contour_painter.dart';
 import 'package:flauncher/widgets/launcher_alternative_view.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/wallpaper_video_background.dart';
@@ -48,15 +47,15 @@ import 'package:flauncher/l10n/app_localizations.dart';
 import 'models/app.dart';
 import 'models/category.dart';
 
-const _kDockOuterPadding = EdgeInsets.only(
-  left: kLauncherSectionHorizontalPadding,
-  right: kLauncherSectionHorizontalPadding,
-  top: 10,
-  bottom: 16,
-);
+/// The tray's edge sits 16 dp outside the content keyline (x = 48), so tiles line up with the
+/// top bar and the hero.
+const _kDockOuterPadding = EdgeInsets.only(left: 32, right: 32, top: 10);
 
-/// Space left between the dock's outer padding and the bottom edge of the screen.
-const _kDockBottomMargin = 8.0;
+/// Space between the bottom of the tray and the bottom edge of the screen (tray ends at y = 506
+/// on a 540 dp tall screen).
+const _kDockBottomMargin = 34.0;
+
+const _kDockTrayPadding = 16.0;
 
 class FLauncher extends StatefulWidget {
   const FLauncher({super.key});
@@ -634,60 +633,27 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     AppsService appsService, {
     required bool handleUpNavigationToSettings,
   }) {
-    final backdropDisabled = context.select<SettingsService, bool>((s) => s.dockBackdropFilterDisabled);
-    final darkBackground = context.select<SettingsService, bool>((s) => s.dockDarkBackground);
-    final shadowEnabled = context.select<SettingsService, bool>((s) => s.dockShadowEnabled);
-    final isBigPicture = context.select<SettingsService, bool>((s) => s.showWatchNextSection && s.watchNextBigPictureMode);
+    final tileRadius = context.select<SettingsService, double>((s) => s.cardCornerRadius);
 
-    const dockBorderRadius = 24.0;
-    final borderRadius = BorderRadius.circular(dockBorderRadius);
-
-    final content = CustomPaint(
-      foregroundPainter: const DockContourPainter(radius: dockBorderRadius, strokeWidth: 1.0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        decoration: BoxDecoration(
-          color: darkBackground
-              ? Colors.black.withValues(alpha: 0.35)
-              : (isBigPicture ? Colors.white.withValues(alpha: 0.16) : Colors.white.withValues(alpha: 0.1)),
-          borderRadius: borderRadius,
-        ),
-        child: CategoryCleanRow(
-          category: category,
-          applications: apps,
-          isFirstSection: handleUpNavigationToSettings,
-          scrollAlignment: 1.0,
-          onAppFocused: _onHomeSectionFocused,
+    // Flat, translucent tray: the picture shows through as it is, without a blurred copy.
+    return Container(
+      key: const Key("dock_tray"),
+      padding: const EdgeInsets.all(_kDockTrayPadding),
+      decoration: BoxDecoration(
+        color: const Color.fromRGBO(30, 30, 30, 0.55),
+        // Concentric with the tiles: tray radius = tile radius + tray padding.
+        borderRadius: BorderRadius.circular(tileRadius + _kDockTrayPadding),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1 / MediaQuery.devicePixelRatioOf(context),
         ),
       ),
-    );
-
-    return Center(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: borderRadius,
-          boxShadow: shadowEnabled
-              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)]
-              : null,
-        ),
-        child: ClipRRect(
-          borderRadius: borderRadius,
-          clipBehavior: Clip.antiAlias,
-          child: backdropDisabled
-              ? content
-              : ListenableBuilder(
-                  listenable: _heroBackdropBaker,
-                  child: content,
-                  builder: (_, child) {
-                    final dockBlur = _heroBackdropBaker.textures?.dockBlur;
-                    return CachedBlurBackdrop(
-                      sigma: 5,
-                      prebakedBlur: dockBlur,
-                      child: child!,
-                    );
-                  },
-                ),
-        ),
+      child: CategoryCleanRow(
+        category: category,
+        applications: apps,
+        isFirstSection: handleUpNavigationToSettings,
+        scrollAlignment: 1.0,
+        onAppFocused: _onHomeSectionFocused,
       ),
     );
   }
@@ -813,14 +779,12 @@ const _kHeroFadeDuration = Duration(milliseconds: 600);
 
 class _HeroBackdropTextures {
   final ui.Image hero;
-  final ui.Image dockBlur;
   final ui.Image gridBlur;
   final Uint8List bytes;
   bool _disposed = false;
 
   _HeroBackdropTextures({
     required this.hero,
-    required this.dockBlur,
     required this.gridBlur,
     required this.bytes,
   });
@@ -829,7 +793,6 @@ class _HeroBackdropTextures {
     if (_disposed) return;
     _disposed = true;
     hero.dispose();
-    dockBlur.dispose();
     gridBlur.dispose();
   }
 }
@@ -922,7 +885,7 @@ class _HeroBackdropBaker extends ChangeNotifier {
         final heroImage = heroPicture.toImageSync(pxSize.width.toInt(), pxSize.height.toInt());
         heroPicture.dispose();
 
-        // 2. Dock blur snapshot (960x540, sigma 5)
+        // 2. App grid blur snapshot (960x540, sigma 10)
         final double targetWidth = min(size.width * dpr, 960.0);
         final double targetHeight = min(size.height * dpr, 540.0);
         final pxWidth = targetWidth.round();
@@ -930,24 +893,6 @@ class _HeroBackdropBaker extends ChangeNotifier {
         final blurRect = Rect.fromLTWH(0, 0, pxWidth.toDouble(), pxHeight.toDouble());
         final double scaleFactor = pxWidth / size.width;
 
-        final dockRecorder = ui.PictureRecorder();
-        final dockCanvas = Canvas(dockRecorder);
-        final dockPaint = Paint()
-          ..imageFilter = ui.ImageFilter.blur(
-            sigmaX: 5.0 * scaleFactor,
-            sigmaY: 5.0 * scaleFactor,
-            tileMode: TileMode.clamp,
-          );
-        dockCanvas.saveLayer(blurRect, dockPaint);
-        paintImage(canvas: dockCanvas, rect: blurRect, image: source, fit: BoxFit.cover, filterQuality: FilterQuality.low);
-        // Blur the scrimmed hero (what is actually on screen), otherwise the blur looks much brighter.
-        const _CinematicScrimPainter().paint(dockCanvas, blurRect.size);
-        dockCanvas.restore();
-        final dockPicture = dockRecorder.endRecording();
-        final dockImage = dockPicture.toImageSync(pxWidth, pxHeight);
-        dockPicture.dispose();
-
-        // 3. App grid blur snapshot (960x540, sigma 10)
         final gridRecorder = ui.PictureRecorder();
         final gridCanvas = Canvas(gridRecorder);
         final gridPaint = Paint()
@@ -958,6 +903,7 @@ class _HeroBackdropBaker extends ChangeNotifier {
           );
         gridCanvas.saveLayer(blurRect, gridPaint);
         paintImage(canvas: gridCanvas, rect: blurRect, image: source, fit: BoxFit.cover, filterQuality: FilterQuality.low);
+        // Blur the scrimmed hero (what is actually on screen), otherwise the blur looks much brighter.
         const _CinematicScrimPainter().paint(gridCanvas, blurRect.size);
         gridCanvas.restore();
         final gridPicture = gridRecorder.endRecording();
@@ -968,7 +914,6 @@ class _HeroBackdropBaker extends ChangeNotifier {
 
         if (!identical(bytes, _requestedBytes)) {
           heroImage.dispose();
-          dockImage.dispose();
           gridImage.dispose();
           continue;
         }
@@ -976,7 +921,6 @@ class _HeroBackdropBaker extends ChangeNotifier {
         final old = _current;
         _current = _HeroBackdropTextures(
           hero: heroImage,
-          dockBlur: dockImage,
           gridBlur: gridImage,
           bytes: bytes,
         );

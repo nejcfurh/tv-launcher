@@ -119,8 +119,25 @@ void main() {
     await tester.pumpAndSettle();
 
     final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
-    // Bottom margin (8) + dock outer padding (16) + dock inner padding (5).
-    expect(tester.getBottomLeft(find.byType(CategoryCleanRow)).dy, moreOrLessEquals(screenHeight - 29, epsilon: 1.5));
+    // Bottom margin (34) + tray padding (16) + tray border (1 physical px, dpr 1 here).
+    expect(tester.getBottomLeft(find.byType(CategoryCleanRow)).dy, moreOrLessEquals(screenHeight - 51, epsilon: 1.5));
+    expect(tester.getBottomLeft(find.byKey(const Key("dock_tray"))).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+    expect(tester.getTopLeft(find.byKey(const Key("dock_tray"))).dx, 32);
+  });
+
+  testWidgets("Dock tray is flat: no blur behind it", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.flauncher.1")]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key("dock_tray")), findsOneWidget);
+    expect(find.byType(CachedBlurBackdrop), findsNothing);
+    expect(find.ancestor(of: find.byType(CategoryCleanRow), matching: find.byType(BackdropFilter)), findsNothing);
   });
 
   testWidgets("Top bar shows shortcuts for installed apps and launches them", (tester) async {
