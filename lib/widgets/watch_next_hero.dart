@@ -73,16 +73,57 @@ Widget carouselTransition({
   required bool incoming,
   required int direction,
   double distance = 0.06,
+  bool fadeEdges = false,
 }) {
   final begin = Offset((incoming ? direction : -direction) * distance, 0);
   final curved = CurvedAnimation(parent: animation, curve: const Interval(0.5, 1, curve: Curves.easeOutCubic));
+  final position = Tween(begin: begin, end: Offset.zero).animate(curved);
+  final slid = SlideTransition(position: position, child: child);
   return FadeTransition(
     opacity: curved,
-    child: SlideTransition(
-      position: Tween(begin: begin, end: Offset.zero).animate(curved),
-      child: child,
-    ),
+    child: fadeEdges
+        ? AnimatedBuilder(
+            animation: position,
+            builder: (context, slid) => _TrailingEdgeFade(shift: position.value.dx, child: slid!),
+            child: slid,
+          )
+        : slid,
   );
+}
+
+/// How far the trailing edge fades in, as a multiple of how far the child has slid.
+const double kCarouselEdgeFadeFactor = 4;
+
+/// Fades the edge a slid child leaves behind into whatever is under it, so a full-screen picture
+/// moving sideways shows a soft edge instead of a hard band. Nothing is faded at rest.
+///
+/// The mask sits outside the slide, in the unmoved box: it stays clear over the strip the child
+/// left and ramps up from the child's edge. Inside the slide, its edge would fall between pixels
+/// and leave the child's first, partly covered column unmasked.
+class _TrailingEdgeFade extends StatelessWidget {
+  /// How far the child has slid, as a fraction of its width (positive: moved right).
+  final double shift;
+  final Widget child;
+
+  const _TrailingEdgeFade({required this.shift, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final gap = shift.abs().clamp(0.0, 0.5);
+    final feather = (gap * kCarouselEdgeFadeFactor).clamp(0.0, 0.5);
+    if (feather == 0) return child;
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) => LinearGradient(
+        // Moved right: the left edge is the one on screen.
+        begin: shift > 0 ? Alignment.centerLeft : Alignment.centerRight,
+        end: shift > 0 ? Alignment.centerRight : Alignment.centerLeft,
+        colors: const [Color(0x00FFFFFF), Color(0x00FFFFFF), Color(0xFFFFFFFF)],
+        stops: [0, gap, gap + feather],
+      ).createShader(bounds),
+      child: child,
+    );
+  }
 }
 
 class WatchNextHero extends StatefulWidget {

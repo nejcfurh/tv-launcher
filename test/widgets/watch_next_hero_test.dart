@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flauncher/l10n/app_localizations.dart';
 import 'package:flauncher/models/app.dart';
@@ -8,6 +9,7 @@ import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/providers/watch_next_service.dart';
 import 'package:flauncher/widgets/watch_next_hero.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
@@ -592,6 +594,68 @@ void main() {
       expect(opacityAt(0.5, incoming: false), 0);
       expect(opacityAt(0.5, incoming: true), 0);
       expect(opacityAt(1, incoming: true), 1);
+    });
+
+    /// Brightness (0-255) along the middle row of a white 1000×40 child that came in from the right
+    /// and is partway through its slide, drawn over black.
+    Future<List<int>> slidRow(WidgetTester tester, {required bool fadeEdges}) async {
+      final key = GlobalKey();
+      await tester.pumpWidget(Center(
+        child: RepaintBoundary(
+          key: key,
+          child: Container(
+            width: 1000,
+            height: 40,
+            color: const Color(0xFF000000),
+            child: carouselTransition(
+              child: const ColoredBox(color: Color(0xFFFFFFFF)),
+              animation: const AlwaysStoppedAnimation(0.6),
+              incoming: true,
+              direction: 1,
+              distance: 0.03,
+              fadeEdges: fadeEdges,
+            ),
+          ),
+        ),
+      ));
+      final bytes = await tester.runAsync(() async {
+        final boundary = key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        return (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+      });
+      return [for (var x = 0; x < 1000; x++) bytes!.getUint8((20 * 1000 + x) * 4)];
+    }
+
+    testWidgets('a sliding backdrop fades its trailing edge instead of showing a hard band', (tester) async {
+      // Control: without the fade, the picture is at full brightness one column past its edge (the
+      // edge column itself is partly covered, since the slide stops between pixels).
+      final hard = await slidRow(tester, fadeEdges: false);
+      final hardEdge = hard.indexWhere((v) => v > 2);
+      expect(hardEdge, greaterThan(0), reason: 'the child has slid right, leaving a dark band');
+      expect(hard[hardEdge + 1], closeTo(hard[500], 3));
+
+      final soft = await slidRow(tester, fadeEdges: true);
+      final softEdge = soft.indexWhere((v) => v > 2);
+      expect(softEdge, greaterThan(hardEdge), reason: 'no partly covered column left unmasked');
+      expect(soft[softEdge], lessThan(soft[500] * 0.25), reason: 'the edge starts faint');
+      // Brightness rises steadily to full over the fade.
+      final fadeEnd = soft.indexWhere((v) => v >= soft[500] - 2);
+      expect(fadeEnd - softEdge, greaterThan(20));
+      for (var x = softEdge + 1; x <= fadeEnd; x++) {
+        expect(soft[x], greaterThanOrEqualTo(soft[x - 1]), reason: 'column $x');
+      }
+      expect(soft[500], closeTo(hard[500], 3), reason: 'the middle is untouched');
+    });
+
+    testWidgets('at rest nothing is masked', (tester) async {
+      await tester.pumpWidget(carouselTransition(
+        child: const SizedBox(),
+        animation: const AlwaysStoppedAnimation(1),
+        incoming: true,
+        direction: 1,
+        fadeEdges: true,
+      ));
+      expect(find.byType(ShaderMask), findsNothing);
     });
   });
 }

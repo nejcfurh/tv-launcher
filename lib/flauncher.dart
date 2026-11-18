@@ -190,6 +190,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                                       incoming: child.key == heroKey,
                                       direction: _heroDirection,
                                       distance: 0.03,
+                                      fadeEdges: true,
                                     ),
                                     child: heroImage == null
                                         ? SizedBox.expand(key: heroKey)

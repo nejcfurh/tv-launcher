@@ -386,6 +386,11 @@ void main() {
     expect(images, hasLength(2));
     expect(images.where((image) => image != firstImage), hasLength(1));
 
+    // While the pictures slide, the leaving and the arriving one both fade their trailing edge
+    // instead of showing a hard band.
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.descendant(of: find.byKey(const ValueKey('hero_bg')), matching: find.byType(ShaderMask)), findsNWidgets(2));
+
     // The old picture is released a second after it leaves.
     await tester.pump(const Duration(seconds: 1));
   });
