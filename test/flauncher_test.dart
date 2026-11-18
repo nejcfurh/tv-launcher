@@ -40,6 +40,7 @@ import 'package:flauncher/widgets/category_row.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flauncher/widgets/settings/settings_panel_page.dart';
+import 'package:flauncher/widgets/vlc_cone_icon.dart';
 import 'package:flauncher/widgets/watch_next_hero.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -389,7 +390,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
-  testWidgets("Router HDD shortcut shows VLC's own icon in grayscale", (tester) async {
+  testWidgets("Router HDD shortcut shows an outline cone in the top bar glyph style", (tester) async {
     final appsService = mkAppService();
     final vlc = fakeApp(packageName: "org.videolan.vlc", name: "VLC", version: "1.0.0");
     when(appsService.categoriesWithApps).thenReturn([]);
@@ -398,17 +399,18 @@ void main() {
     await _pumpWidgetWith(tester, appsService);
     await tester.pump();
 
-    expect(_grayscaleAppIcon("org.videolan.vlc"), findsOneWidget);
-    expect(
-      find.descendant(of: find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), matching: find.byType(Image)),
-      findsOneWidget,
-    );
-    verify(appsService.getAppIcon("org.videolan.vlc"));
-    // Same size as the settings and network glyphs.
-    expect(
-      tester.getSize(find.descendant(of: find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), matching: find.byType(Image))),
-      const Size(18, 18),
-    );
+    final shortcut = find.byKey(const Key("top_bar_shortcut_org.videolan.vlc"));
+    final cone = find.descendant(of: shortcut, matching: find.byType(VlcConeIcon));
+    expect(cone, findsOneWidget);
+    expect(tester.widget<VlcConeIcon>(cone).color, const Color(0xCCFFFFFF));
+    // Same box as the settings and globe glyphs, and drawn, not a picture.
+    expect(tester.getSize(cone), const Size(18, 18));
+    expect(find.descendant(of: shortcut, matching: find.byType(Image)), findsNothing);
+    verifyNever(appsService.getAppIcon("org.videolan.vlc"));
+
+    await tester.tap(shortcut);
+    await tester.pump();
+    verify(appsService.launchApp(vlc));
   });
 
   testWidgets("Browser shortcut prefers TV Bro over the TCL browser", (tester) async {

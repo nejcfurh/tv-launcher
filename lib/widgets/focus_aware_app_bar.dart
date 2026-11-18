@@ -13,6 +13,7 @@ import 'app_bar_focus_ring.dart';
 import 'daily_wifi_usage_widget.dart';
 import 'date_time_widget.dart';
 import 'network_widget.dart';
+import 'vlc_cone_icon.dart';
 
 class FocusAwareAppBar extends StatefulWidget implements PreferredSizeWidget
 {
@@ -230,12 +231,27 @@ const TextStyle _kTimeTextStyle = TextStyle(
 );
 
 /// Apps opened from the top bar instead of the dock. Each shortcut opens the first of its
-/// packages that is installed, and is hidden when none is. It shows the app's own icon in
-/// grayscale with [useAppIcon], else [icon] in the style of the settings and network icons.
-const List<({List<String> packageNames, IconData icon, bool useAppIcon, String label})> kTopBarShortcuts = [
-  (packageNames: ['com.android.vending'], icon: Icons.shop_outlined, useAppIcon: true, label: 'Play Store'),
-  (packageNames: ['com.phlox.tvwebbrowser', 'com.tcl.browser'], icon: Icons.public, useAppIcon: false, label: 'Browser'),
-  (packageNames: ['org.videolan.vlc'], icon: Icons.dns_outlined, useAppIcon: true, label: 'Router HDD'),
+/// packages that is installed, and is hidden when none is. It shows [glyph] when set, else the
+/// app's own icon in grayscale with [useAppIcon], else [icon] in the style of the settings and
+/// network icons.
+typedef TopBarShortcut = ({List<String> packageNames, IconData icon, bool useAppIcon, Widget? glyph, String label});
+
+const List<TopBarShortcut> kTopBarShortcuts = [
+  (packageNames: ['com.android.vending'], icon: Icons.shop_outlined, useAppIcon: true, glyph: null, label: 'Play Store'),
+  (
+    packageNames: ['com.phlox.tvwebbrowser', 'com.tcl.browser'],
+    icon: Icons.public,
+    useAppIcon: false,
+    glyph: null,
+    label: 'Browser',
+  ),
+  (
+    packageNames: ['org.videolan.vlc'],
+    icon: Icons.dns_outlined,
+    useAppIcon: false,
+    glyph: VlcConeIcon(size: _kTopBarIconSize, color: _kTopBarIconColor),
+    label: 'Router HDD',
+  ),
 ];
 
 /// Rec. 709 luma weights: app icons keep their shapes and shading but lose their colour, so they
@@ -249,7 +265,9 @@ const ColorFilter kTopBarGrayscale = ColorFilter.matrix([
 
 Widget _barIcon(IconData icon) => Icon(icon, size: _kTopBarIconSize, color: _kTopBarIconColor);
 
-Widget _shortcutIcon(({List<String> packageNames, IconData icon, bool useAppIcon, String label}) shortcut, App app) {
+Widget _shortcutIcon(TopBarShortcut shortcut, App app) {
+  final glyph = shortcut.glyph;
+  if (glyph != null) return glyph;
   if (shortcut.useAppIcon) {
     return _ShortcutIcon(packageName: app.packageName, fallback: shortcut.icon);
   }
