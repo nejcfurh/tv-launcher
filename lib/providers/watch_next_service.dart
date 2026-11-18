@@ -26,6 +26,37 @@ import 'package:flauncher/models/watch_next_item.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:http/http.dart' as http;
 
+/// The width the hero backdrop fills: the screen at 1080p.
+const int kArtworkTargetWidth = 1920;
+
+/// [uri] asking its image server for a backdrop [kArtworkTargetWidth] wide, when the link carries
+/// a smaller size the server lets us change; otherwise [uri] itself.
+///
+/// Disney+ and HBO Max publish 544 and 600 px wide images in Watch Next, which look soft
+/// stretched across the screen; both servers return 1920 px when the link asks for it.
+Uri largerArtworkUri(Uri uri) {
+  final host = uri.host;
+  final query = uri.queryParameters;
+  // Disney+: ripcut-delivery …/scale?format=webp&height=306&width=544
+  if (host.endsWith('bamgrid.com') && uri.path.contains('/ripcut-delivery/') && uri.path.endsWith('/scale')) {
+    final width = int.tryParse(query['width'] ?? '');
+    final height = int.tryParse(query['height'] ?? '');
+    if (width == null || height == null || width <= 0 || width >= kArtworkTargetWidth) return uri;
+    return uri.replace(queryParameters: {
+      ...query,
+      'width': '$kArtworkTargetWidth',
+      'height': '${(height * kArtworkTargetWidth / width).round()}',
+    });
+  }
+  // HBO Max: images.cdn.prd.api.discomax.com/…?w=600&q=85&p=true&f=jpg
+  if (host.endsWith('discomax.com')) {
+    final width = int.tryParse(query['w'] ?? '');
+    if (width == null || width <= 0 || width >= kArtworkTargetWidth) return uri;
+    return uri.replace(queryParameters: {...query, 'w': '$kArtworkTargetWidth'});
+  }
+  return uri;
+}
+
 class WatchNextService extends ChangeNotifier {
   final FLauncherChannel _fLauncherChannel;
   final SettingsService? _settingsService;
@@ -331,10 +362,12 @@ class WatchNextService extends ChangeNotifier {
       if (uri.startsWith('content://')) {
         imageBytes = await _fLauncherChannel.loadContentUriImage(uri);
       } else {
-        final uriObj = Uri.parse(uri);
-        final response = await http.get(uriObj).timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200) {
-          imageBytes = response.bodyBytes;
+        final published = Uri.parse(uri);
+        final larger = largerArtworkUri(published);
+        imageBytes = await _download(larger);
+        // The image server may refuse the size we asked for; the published link still works.
+        if ((imageBytes == null || imageBytes.isEmpty) && larger != published) {
+          imageBytes = await _download(published);
         }
       }
 
@@ -362,6 +395,15 @@ class WatchNextService extends ChangeNotifier {
       }
     } finally {
       _loadingPosters.remove(uri);
+    }
+  }
+
+  Future<Uint8List?> _download(Uri uri) async {
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      return response.statusCode == 200 ? response.bodyBytes : null;
+    } catch (_) {
+      return null;
     }
   }
 
