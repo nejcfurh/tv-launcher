@@ -49,12 +49,12 @@ import 'models/app.dart';
 import 'models/category.dart';
 
 /// The tray's edge sits 16 dp outside the content keyline (x = 48), so tiles line up with the
-/// top bar and the hero.
-const _kDockOuterPadding = EdgeInsets.only(left: 32, right: 32, top: 10);
+/// top bar and the hero. The 34 dp below the tray (it ends at y = 506 on a 540 dp tall screen)
+/// belong to the dock, so the first grid section starts below the screen edge.
+const _kDockOuterPadding = EdgeInsets.only(left: 32, right: 32, top: 10, bottom: 34);
 
-/// Space between the bottom of the tray and the bottom edge of the screen (tray ends at y = 506
-/// on a 540 dp tall screen).
-const _kDockBottomMargin = 34.0;
+/// Space between the dock's outer padding and the bottom edge of the screen.
+const _kDockBottomMargin = 0.0;
 
 const _kDockTrayPadding = 16.0;
 

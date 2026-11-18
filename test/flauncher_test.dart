@@ -280,6 +280,23 @@ void main() {
     expect(ringOpacity("me.efesser.two"), 1);
   });
 
+  testWidgets("The grid's first heading stays below the screen edge until the grid is focused", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final applicationsCategory = fakeCategory(name: "Applications", order: 1);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.dock")]),
+      CategoryWithApps(applicationsCategory, [fakeApp(packageName: "me.efesser.grid")]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(tester.getBottomLeft(find.byKey(const Key("dock_tray"))).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+    expect(tester.getTopLeft(find.text("Applications", skipOffstage: false)).dy, greaterThanOrEqualTo(screenHeight - 0.5));
+  });
+
   testWidgets("Dock tray is flat: no blur behind it", (tester) async {
     final appsService = mkAppService();
     final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
