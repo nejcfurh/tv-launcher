@@ -145,6 +145,79 @@ void main() {
     expect(tester.getTopRight(last).dx, screenWidth - 48);
   });
 
+  testWidgets("Dock ends with a square All apps tile when apps are listed below it", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final applicationsCategory = fakeCategory(name: "Applications", order: 1);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.dock")]),
+      CategoryWithApps(applicationsCategory, [fakeApp(packageName: "me.efesser.grid")]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    final screenWidth = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final tile = find.byType(DockAllAppsTile);
+    expect(tile, findsOneWidget);
+    expect(tester.getSize(tile), const Size(42, 42));
+    expect(tester.getTopRight(tile).dx, screenWidth - 48);
+    expect(tester.getTopLeft(findAppCard("me.efesser.dock")).dx, 48);
+  });
+
+  testWidgets("Dock has no All apps tile when nothing is listed below it", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.dock")]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DockAllAppsTile), findsNothing);
+  });
+
+  testWidgets("All apps moves focus to the first app below the dock, and Back returns to it", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final applicationsCategory = fakeCategory(name: "Applications", order: 1);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.dock")]),
+      CategoryWithApps(applicationsCategory, [
+        fakeApp(packageName: "me.efesser.grid1"),
+        fakeApp(packageName: "me.efesser.grid2"),
+      ]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+    expect(isAppCardFocused(tester, "me.efesser.dock"), isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    final allAppsElement = tester.element(find.byType(DockAllAppsTile));
+    bool allAppsFocused() => tester.widget<DockAllAppsTile>(find.byType(DockAllAppsTile)).focusNode!.hasPrimaryFocus;
+    expect(allAppsFocused(), isTrue);
+
+    // The focused grid tile pulses forever, so step time instead of settling.
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(isAppCardFocused(tester, "me.efesser.grid1"), isTrue);
+    final launcherState = Provider.of<LauncherState>(allAppsElement, listen: false);
+    expect(launcherState.appGridFocused, isTrue);
+
+    launcherState.handleBackNavigation(allAppsElement);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(allAppsFocused(), isTrue);
+    expect(launcherState.appGridFocused, isFalse);
+    expect(tester.widget<CustomScrollView>(find.byType(CustomScrollView)).controller!.offset, 0);
+  });
+
   testWidgets("Dock hides app names even when names are on for the grid", (tester) async {
     final appsService = mkAppService();
     final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);

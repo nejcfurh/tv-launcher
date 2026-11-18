@@ -69,6 +69,8 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   int _homePressGeneration = 0;
   final GlobalKey _dockKey = GlobalKey();
+  final FocusNode _allAppsFocusNode = FocusNode(debugLabel: "dock_all_apps");
+  late final LauncherState _launcherState;
   late final _HeroBackdropBaker _heroBackdropBaker = _HeroBackdropBaker();
 
   /// Added to the spacer above the dock so the dock ends at the bottom of the screen.
@@ -81,12 +83,18 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     FLauncherChannel.setHomePressedHandler(_onHomePressed);
+    _launcherState = context.read<LauncherState>();
+    _launcherState.returnToDockHandler = _returnToDock;
   }
 
   @override
   void dispose() {
     FLauncherChannel.setHomePressedHandler(null);
+    if (_launcherState.returnToDockHandler == _returnToDock) {
+      _launcherState.returnToDockHandler = null;
+    }
     WidgetsBinding.instance.removeObserver(this);
+    _allAppsFocusNode.dispose();
     _scrollController.dispose();
     _heroBackdropBaker.dispose();
     super.dispose();
@@ -286,6 +294,8 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
           return true;
         }).toList();
 
+    final hasAppsBelowDock = otherSections.any((section) => section is Category && section.applications.isNotEmpty);
+
     final showWatchNextSection = context.select<SettingsService, bool>((s) => s.showWatchNextSection);
     final watchNextBigPicture = context.select<SettingsService, bool>((s) => s.watchNextBigPictureMode);
     final watchNextVisible = context.select<WatchNextService, bool>((s) => s.hasVisibleSection);
@@ -337,6 +347,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                     favoriteApps,
                     appsService,
                     handleUpNavigationToSettings: !reserveWatchNextSpace,
+                    showAllAppsTile: hasAppsBelowDock,
                   ),
                 ),
               ),
@@ -632,6 +643,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     List<App> apps,
     AppsService appsService, {
     required bool handleUpNavigationToSettings,
+    required bool showAllAppsTile,
   }) {
     final tileRadius = context.select<SettingsService, double>((s) => s.cardCornerRadius);
     // Concentric with the tiles: tray radius = tile radius + tray padding.
@@ -656,8 +668,57 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
         isFirstSection: handleUpNavigationToSettings,
         scrollAlignment: 1.0,
         onAppFocused: _onHomeSectionFocused,
+        onAllAppsPressed: showAllAppsTile ? _focusFirstGridApp : null,
+        allAppsFocusNode: _allAppsFocusNode,
       ),
     );
+  }
+
+  /// "All apps" in the dock: focus the top-left app below the dock, which scrolls the grid up.
+  Future<void> _focusFirstGridApp() async {
+    var target = _firstGridAppNode();
+    if (target == null) {
+      // The grid is built lazily; reveal it first.
+      await _scrollDockToTop();
+      if (!mounted) return;
+      target = _firstGridAppNode();
+    }
+    target?.requestFocus();
+  }
+
+  FocusNode? _firstGridAppNode() {
+    FocusNode? first;
+    Offset? firstOrigin;
+    for (final node in FocusScope.of(context).traversalDescendants) {
+      final nodeContext = node.context;
+      if (nodeContext == null || !node.canRequestFocus) continue;
+      if (nodeContext.findAncestorWidgetOfExactType<AppCard>() == null) continue;
+      if (nodeContext.findAncestorWidgetOfExactType<CategoryCleanRow>() != null) continue;
+      final renderObject = nodeContext.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.attached) continue;
+      final origin = renderObject.localToGlobal(Offset.zero);
+      if (firstOrigin == null || origin.dy < firstOrigin.dy || (origin.dy == firstOrigin.dy && origin.dx < firstOrigin.dx)) {
+        first = node;
+        firstOrigin = origin;
+      }
+    }
+    return first;
+  }
+
+  /// Back while the app grid has focus: return to the "All apps" tile and the top of the page.
+  bool _returnToDock() {
+    if (!mounted || _allAppsFocusNode.context == null) {
+      return false;
+    }
+    _allAppsFocusNode.requestFocus();
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.minScrollExtent,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+    return true;
   }
 
   /// The wallpaper with the same top and bottom scrims as the hero backdrop, crossfading as one.

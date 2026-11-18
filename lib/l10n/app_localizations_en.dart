@@ -394,6 +394,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get watchNextOn => 'Watch Next on';
 
   @override
+  String get dockAllApps => 'All apps';
+
+  @override
   String get showWatchNextSection => 'Show Watch Next Section';
 
   @override

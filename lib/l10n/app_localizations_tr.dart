@@ -396,6 +396,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get watchNextOn => 'Sıradaki İzlenecek:';
 
   @override
+  String get dockAllApps => 'All apps';
+
+  @override
   String get showWatchNextSection => 'Sıradaki İzlenecek Bölümünü Göster';
 
   @override

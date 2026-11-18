@@ -55,7 +55,14 @@ class LauncherState extends ChangeNotifier
     notifyListeners();
   }
 
+  /// Set by the home page: moves focus from the app grid back to the dock. Returns false when
+  /// there is no dock to return to.
+  bool Function()? returnToDockHandler;
+
   void handleBackNavigation(BuildContext context) {
+    if (_appGridFocused && (returnToDockHandler?.call() ?? false)) {
+      return;
+    }
     AppsService appsService = context.read<AppsService>();
     LauncherState launcherState = context.read<LauncherState>();
     SettingsService settingsService = context.read<SettingsService>();

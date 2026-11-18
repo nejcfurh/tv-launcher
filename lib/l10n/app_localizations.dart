@@ -824,6 +824,12 @@ abstract class AppLocalizations {
   /// **'Watch Next on'**
   String get watchNextOn;
 
+  /// No description provided for @dockAllApps.
+  ///
+  /// In en, this message translates to:
+  /// **'All apps'**
+  String get dockAllApps;
+
   /// No description provided for @showWatchNextSection.
   ///
   /// In en, this message translates to:

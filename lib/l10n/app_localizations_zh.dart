@@ -390,6 +390,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get watchNextOn => '继续观看 ·';
 
   @override
+  String get dockAllApps => '所有应用';
+
+  @override
   String get showWatchNextSection => '显示“继续观看”分区';
 
   @override
