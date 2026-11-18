@@ -44,6 +44,17 @@ const kAppCardVerticalPadding = 9.0;
 const kLauncherSectionHorizontalPadding = 24.0;
 const kAppNameLabelHeight = 24.0;
 
+/// Grid tiles decode their picture at this width; they are drawn up to about this wide.
+const kGridAppImageDecodeWidth = 480;
+
+/// Width, in pixels, to decode a tile's picture at: what the tile shows at its largest. A dock
+/// tile is at most [kDockTileMaxWidth] wide and grows by [kDockTileFocusedScale] when focused.
+int appImageDecodeWidth(BuildContext context, {required bool dockTile}) {
+  if (!dockTile) return kGridAppImageDecodeWidth;
+  final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+  return min(kGridAppImageDecodeWidth, (kDockTileMaxWidth * kDockTileFocusedScale * dpr).ceil());
+}
+
 /// How long the loading placeholder takes to fade off a tile once its picture is ready.
 const kAppImageFadeDuration = Duration(milliseconds: 150);
 
@@ -336,7 +347,8 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
         type = AppImageType.Icon;
         bytes = await service.getAppIcon(widget.application.packageName);
       }
-      final image = ResizeImage(MemoryImage(bytes), width: 480);
+      if (!mounted) return;
+      final image = ResizeImage(MemoryImage(bytes), width: appImageDecodeWidth(context, dockTile: widget.dockTile));
       // Decoded before it is shown, so the tile never sits empty between the placeholder and it. A
       // decode that hangs only delays the picture; the placeholder still goes.
       if (mounted) {

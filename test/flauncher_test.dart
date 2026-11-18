@@ -17,6 +17,7 @@
  */
 
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'dart:typed_data';
 
 import 'package:flauncher/build_flags.dart';
@@ -415,6 +416,92 @@ void main() {
 
     expect(find.text("The Office"), findsWidgets, reason: 'the hero is on screen in this frame');
     expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+  });
+
+  testWidgets("Dock tiles decode their picture at the size they are shown, grid tiles at 480 px", (tester) async {
+    final appsService = mkAppService();
+    when((appsService as MockAppsService).getAppBanner(any)).thenAnswer((_) async => Uint8List(0));
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final applicationsCategory = fakeCategory(name: "Applications", order: 1);
+    final docked = fakeApp(packageName: "me.efesser.flauncher.1", name: "FLauncher 1", version: "1.0.0");
+    final gridApp = fakeApp(packageName: "me.efesser.flauncher.2", name: "FLauncher 2", version: "2.0.0");
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [docked]),
+      CategoryWithApps(applicationsCategory, [gridApp]),
+    ]);
+    await _pumpWidgetWith(tester, appsService);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -200));
+    await tester.pumpAndSettle();
+
+    int? decodeWidth(String packageName) {
+      final ink = tester.widget<Ink>(find.descendant(of: findAppCard(packageName), matching: find.byType(Ink)).first);
+      return ((ink.decoration! as BoxDecoration).image!.image as ResizeImage).width;
+    }
+
+    expect(decodeWidth(docked.packageName), (82 * 1.14 * tester.view.devicePixelRatio).ceil());
+    expect(decodeWidth(gridApp.packageName), 480);
+  });
+
+  testWidgets("A backdrop prepared for an item that is never shown is released", (tester) async {
+    var openImages = 0;
+    final previousOnCreate = ui.Image.onCreate;
+    final previousOnDispose = ui.Image.onDispose;
+    ui.Image.onCreate = (_) => openImages++;
+    ui.Image.onDispose = (_) => openImages--;
+    addTearDown(() {
+      ui.Image.onCreate = previousOnCreate;
+      ui.Image.onDispose = previousOnDispose;
+    });
+
+    final settingsService = mkSettingsService();
+    when(settingsService.showWatchNextSection).thenReturn(true);
+    when(settingsService.watchNextBigPictureMode).thenReturn(true);
+    final first = WatchNextItem(id: 1, title: "The Office", posterUri: "content://poster/1");
+    final second = WatchNextItem(id: 2, title: "Nihce", posterUri: "content://poster/2");
+    final third = WatchNextItem(id: 3, title: "Ted Lasso", posterUri: "content://poster/3");
+    final posters = {for (final item in [first, second, third]) item.posterUri!: _onePixelPng()};
+    var shown = first;
+    final watchNextService = mkWatchNextService();
+    when(watchNextService.activeHeroItem).thenAnswer((_) => shown);
+    when(watchNextService.getPosterUriForItem(any))
+        .thenAnswer((invocation) => (invocation.positionalArguments.single as WatchNextItem?)?.posterUri);
+    when(watchNextService.getCachedPoster(any))
+        .thenAnswer((invocation) => posters[invocation.positionalArguments.single]);
+
+    await _pumpWidgetWithProviders(tester, mkWallpaperService(), mkAppService(), settingsService, watchNextService);
+    final gate = verify(watchNextService.heroSwitchGate = captureAny).captured.single as Future<void> Function(WatchNextItem);
+    final heroBackdrop = find.descendant(of: find.byKey(const ValueKey('hero_bg')), matching: find.byType(RawImage));
+
+    ui.Image? shownImage;
+    Future<void> showAndSettle(WatchNextItem item) async {
+      final before = shownImage;
+      shown = item;
+      tester.element(find.byType(FLauncher)).markNeedsBuild();
+      await tester.pump();
+      // Until this item's picture is the only one on screen.
+      for (var i = 0; i < 100; i++) {
+        final images = tester.widgetList<RawImage>(heroBackdrop).map((raw) => raw.image).toList();
+        if (images.length == 1 && images.single != null && !identical(images.single, before)) {
+          shownImage = images.single;
+          break;
+        }
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(shownImage, isNot(same(before)), reason: '${item.title} is on screen');
+      // The switch and the delayed release of the old textures.
+      await tester.pump(kHeroCarouselDuration);
+      await tester.pump(const Duration(seconds: 2));
+    }
+
+    await showAndSettle(first);
+    final steady = openImages;
+
+    // The next item is baked ahead, but the hero moves to another one instead.
+    await tester.runAsync(() => gate(second));
+    await showAndSettle(third);
+
+    expect(openImages, steady, reason: 'one item shown again, nothing kept for the item that was skipped');
   });
 
   testWidgets("A prepared hero backdrop starts its transition in the frame the hero item changes", (tester) async {
