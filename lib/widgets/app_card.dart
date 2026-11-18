@@ -26,6 +26,7 @@ import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/widgets/app_card_contour_painter.dart';
 import 'package:flauncher/widgets/application_info_panel.dart';
+import 'package:flauncher/widgets/dock_focus_ring.dart';
 import 'package:flauncher/widgets/focus_keyboard_listener.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -68,6 +69,10 @@ class AppCard extends StatefulWidget {
   final bool ensureVisibleOnFocus;
   final bool onlyScrollWhenNearBottom;
 
+  /// Dock look: no app names, a white ring outside the focused tile instead of the accent contour,
+  /// and no dimming of unfocused tiles.
+  final bool dockTile;
+
   const AppCard({
     super.key,
     required this.application,
@@ -81,6 +86,7 @@ class AppCard extends StatefulWidget {
     this.onFocused,
     this.ensureVisibleOnFocus = true,
     this.onlyScrollWhenNearBottom = false,
+    this.dockTile = false,
   });
 
   @override
@@ -202,6 +208,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
     }
     final appImageWidget = _appImage(displayName);
     final bool shouldHighlight = _shouldHighlight();
+    final bool dock = widget.dockTile;
 
     return FocusKeyboardListener(
       onPressed: _onPressed,
@@ -220,17 +227,19 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                 child: _wrapAspectRatio(
                   RepaintBoundary(
                     child: AnimatedScale(
-                      scale: !_moving && shouldHighlight ? _focusedScale : 1.0,
-                      duration: _focusAnimationDuration,
+                      scale: !_moving && shouldHighlight ? (dock ? kDockTileFocusedScale : _focusedScale) : 1.0,
+                      duration: dock ? kDockFocusDuration : _focusAnimationDuration,
                       alignment: Alignment.center,
-                      curve: Curves.easeOutCubic,
+                      curve: dock ? Curves.easeOut : Curves.easeOutCubic,
                       child: Stack(
                         fit: StackFit.expand,
+                        clipBehavior: Clip.none,
                         children: [
+                          if (dock) DockTileShadow(tileRadius: cornerRadius, visible: shouldHighlight && !_moving),
                           Material(
                             borderRadius: BorderRadius.circular(cornerRadius),
                             clipBehavior: Clip.antiAlias,
-                            elevation: shouldHighlight ? 7 : 4,
+                            elevation: dock ? 0 : (shouldHighlight ? 7 : 4),
                             shadowColor: Colors.black,
                             child: Stack(
                               fit: StackFit.expand,
@@ -247,18 +256,23 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                                   },
                                 ),
                                 if (_moving) ..._arrows(),
-                                IgnorePointer(
-                                  child: AnimatedOpacity(
-                                    duration: _focusAnimationDuration,
-                                    curve: Curves.easeInOut,
-                                    opacity: shouldHighlight ? 0.0 : 1.0,
-                                    child: const ColoredBox(color: Color(0x1A000000)),
+                                if (dock)
+                                  DockTileInnerBorder(tileRadius: cornerRadius)
+                                else
+                                  IgnorePointer(
+                                    child: AnimatedOpacity(
+                                      duration: _focusAnimationDuration,
+                                      curve: Curves.easeInOut,
+                                      opacity: shouldHighlight ? 0.0 : 1.0,
+                                      child: const ColoredBox(color: Color(0x1A000000)),
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
-                          if ((shouldHighlight && showFocusBorders) || _moving)
+                          if (dock && showFocusBorders)
+                            DockFocusRing(tileRadius: cornerRadius, visible: shouldHighlight && !_moving),
+                          if ((!dock && shouldHighlight && showFocusBorders) || _moving)
                             if (animationEnabled && !_moving)
                               IgnorePointer(
                                 child: RepaintBoundary(
@@ -294,7 +308,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                 ),
               ),
               // Hidden labels keep their space so rows don't jump when focus moves.
-              if (showAppNames)
+              if (showAppNames && !dock)
                 AnimatedOpacity(
                   opacity: !appNamesOnFocusOnly || shouldHighlight ? 1.0 : 0.0,
                   duration: _focusAnimationDuration,
@@ -446,7 +460,8 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
   }
 
   void _updateHighlightAnimation() {
-    _setHighlightAnimation(_shouldHighlight() && _animationEnabled);
+    // The dock ring does not pulse, so a dock tile would only tick the controller for nothing.
+    _setHighlightAnimation(_shouldHighlight() && _animationEnabled && !widget.dockTile);
   }
 
   void _setHighlightAnimation(bool shouldAnimate) {

@@ -19,14 +19,29 @@
 import 'dart:math';
 
 import 'package:flauncher/providers/apps_service.dart';
-import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/widgets/app_card.dart';
 import 'package:flauncher/widgets/category_container_common.dart';
+import 'package:flauncher/widgets/dock_focus_ring.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app.dart';
 import '../models/category.dart';
+
+/// Smallest space between two dock tiles, so the focus ring of a scaled tile stays clear of its
+/// neighbours.
+const kDockMinTileGap = 12.0;
+
+/// Size of each of [tileCount] dock tiles in [contentWidth]: [kDockTileMaxWidth] wide while they
+/// fit, otherwise all shrink evenly, keeping their shape.
+Size dockTileSize(double contentWidth, int tileCount) {
+  if (tileCount <= 0) {
+    return const Size(kDockTileMaxWidth, kDockTileHeight);
+  }
+  final fitWidth = (contentWidth - (tileCount - 1) * kDockMinTileGap) / tileCount;
+  final width = max(0.0, min(kDockTileMaxWidth, fitWidth));
+  return Size(width, width * kDockTileHeight / kDockTileMaxWidth);
+}
 
 class CategoryCleanRow extends StatelessWidget
 {
@@ -48,7 +63,6 @@ class CategoryCleanRow extends StatelessWidget
 
   @override
   Widget build(BuildContext context) {
-    final showAppNames = context.select<SettingsService, bool>((s) => s.showAppNamesBelowIcons);
     Widget categoryContent;
     if (applications.isEmpty) {
       categoryContent = categoryContainerEmptyState(context);
@@ -56,39 +70,31 @@ class CategoryCleanRow extends StatelessWidget
     else {
       categoryContent = LayoutBuilder(
         builder: (context, constraints) {
-          // Grow past the default slot count so no app in the row is dropped.
-          final slotCount = max(Category.ColumnsCount, applications.length);
-          final rowHeight = appCardRowExtentFromContentWidth(constraints.maxWidth, columnCount: slotCount)
-              + (showAppNames ? kAppNameLabelHeight : 0);
+          final tileSize = dockTileSize(constraints.maxWidth, applications.length);
           return SizedBox(
-            height: rowHeight,
+            height: tileSize.height,
             child: Row(
-              children: List.generate(slotCount, (index) {
-                if (index < applications.length) {
-                  return Expanded(
-                    child: Padding(
-                      key: ValueKey(applications[index].packageName),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: kAppCardHorizontalPadding,
-                        vertical: kAppCardVerticalPadding,
-                      ),
-                      child: AppCard(
-                        category: category,
-                        application: applications[index],
-                        autofocus: index == 0,
-                        handleUpNavigationToSettings: isFirstSection,
-                        scrollAlignment: scrollAlignment,
-                        enforceAspectRatio: false,
-                        onFocused: onAppFocused,
-                        onMove: (direction) => _onMove(context, direction, index),
-                        onMoveEnd: () => _onMoveEnd(context),
-                      ),
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                for (final (index, application) in applications.indexed)
+                  SizedBox(
+                    key: ValueKey(application.packageName),
+                    width: tileSize.width,
+                    height: tileSize.height,
+                    child: AppCard(
+                      category: category,
+                      application: application,
+                      autofocus: index == 0,
+                      handleUpNavigationToSettings: isFirstSection,
+                      scrollAlignment: scrollAlignment,
+                      enforceAspectRatio: false,
+                      dockTile: true,
+                      onFocused: onAppFocused,
+                      onMove: (direction) => _onMove(context, direction, index),
+                      onMoveEnd: () => _onMoveEnd(context),
                     ),
-                  );
-                } else {
-                  return const Expanded(child: SizedBox.shrink());
-                }
-              }),
+                  ),
+              ],
             ),
           );
         },

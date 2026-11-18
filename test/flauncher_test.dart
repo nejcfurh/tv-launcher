@@ -119,10 +119,92 @@ void main() {
     await tester.pumpAndSettle();
 
     final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
-    // Bottom margin (34) + tray padding (16) + tray border (1 physical px, dpr 1 here).
-    expect(tester.getBottomLeft(find.byType(CategoryCleanRow)).dy, moreOrLessEquals(screenHeight - 51, epsilon: 1.5));
+    // Bottom margin (34) + tray padding (16).
+    expect(tester.getBottomLeft(find.byType(CategoryCleanRow)).dy, moreOrLessEquals(screenHeight - 50, epsilon: 1.5));
     expect(tester.getBottomLeft(find.byKey(const Key("dock_tray"))).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
     expect(tester.getTopLeft(find.byKey(const Key("dock_tray"))).dx, 32);
+  });
+
+  testWidgets("Dock tiles are 82x42 and spread from keyline to keyline", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = List.generate(
+      8,
+      (i) => fakeApp(packageName: "me.efesser.flauncher.$i", name: "FLauncher $i", version: "1.0.0"),
+    );
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    final screenWidth = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final first = findAppCard(favorites.first.packageName);
+    final last = findAppCard(favorites.last.packageName);
+    expect(tester.getSize(first), const Size(82, 42));
+    expect(tester.getTopLeft(first).dx, 48);
+    expect(tester.getTopRight(last).dx, screenWidth - 48);
+  });
+
+  testWidgets("Dock hides app names even when names are on for the grid", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final applicationsCategory = fakeCategory(name: "Applications", order: 1);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.dock", name: "Dock app")]),
+      CategoryWithApps(applicationsCategory, [fakeApp(packageName: "me.efesser.grid", name: "Grid app")]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+
+    Finder nameLabel(String packageName) => find.descendant(
+      of: findAppCard(packageName),
+      matching: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_AppNameLabel'),
+    );
+    expect(nameLabel("me.efesser.dock"), findsNothing);
+    expect(nameLabel("me.efesser.grid"), findsOneWidget);
+  });
+
+  testWidgets("Focused dock tile scales up and gets the white ring; others stay as they are", (tester) async {
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+    final appsService = mkAppService();
+    final settingsService = mkSettingsService();
+    when(settingsService.showFocusBorders).thenReturn(true);
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [
+        fakeApp(packageName: "me.efesser.one", name: "One"),
+        fakeApp(packageName: "me.efesser.two", name: "Two"),
+      ]),
+    ]);
+
+    await _pumpWidgetWithProviders(tester, mkWallpaperService(), appsService, settingsService);
+    await tester.pumpAndSettle();
+    expect(isAppCardFocused(tester, "me.efesser.one"), isTrue);
+
+    double ringOpacity(String packageName) => tester
+        .widget<AnimatedOpacity>(find.descendant(of: findAppCard(packageName), matching: find.byKey(const Key("dock_focus_ring"))))
+        .opacity;
+    double tileScale(String packageName) => tester
+        .widget<AnimatedScale>(find.descendant(of: findAppCard(packageName), matching: find.byType(AnimatedScale)).at(1))
+        .scale;
+
+    expect(ringOpacity("me.efesser.one"), 1);
+    expect(tileScale("me.efesser.one"), 1.14);
+    expect(ringOpacity("me.efesser.two"), 0);
+    expect(tileScale("me.efesser.two"), 1);
+    // Unfocused dock tiles are not dimmed.
+    expect(
+      find.descendant(of: findAppCard("me.efesser.two"), matching: find.byWidgetPredicate((w) => w is ColoredBox && w.color == const Color(0x1A000000))),
+      findsNothing,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(ringOpacity("me.efesser.one"), 0);
+    expect(ringOpacity("me.efesser.two"), 1);
   });
 
   testWidgets("Dock tray is flat: no blur behind it", (tester) async {

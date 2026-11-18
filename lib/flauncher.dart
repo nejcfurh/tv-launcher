@@ -634,15 +634,17 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     required bool handleUpNavigationToSettings,
   }) {
     final tileRadius = context.select<SettingsService, double>((s) => s.cardCornerRadius);
+    // Concentric with the tiles: tray radius = tile radius + tray padding.
+    final trayRadius = BorderRadius.circular(tileRadius + _kDockTrayPadding);
 
     // Flat, translucent tray: the picture shows through as it is, without a blurred copy.
     return Container(
       key: const Key("dock_tray"),
       padding: const EdgeInsets.all(_kDockTrayPadding),
-      decoration: BoxDecoration(
-        color: const Color.fromRGBO(30, 30, 30, 0.55),
-        // Concentric with the tiles: tray radius = tile radius + tray padding.
-        borderRadius: BorderRadius.circular(tileRadius + _kDockTrayPadding),
+      decoration: BoxDecoration(color: const Color.fromRGBO(30, 30, 30, 0.55), borderRadius: trayRadius),
+      // A foreground border adds no padding, so the tiles start exactly on the content keyline.
+      foregroundDecoration: BoxDecoration(
+        borderRadius: trayRadius,
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.1),
           width: 1 / MediaQuery.devicePixelRatioOf(context),
