@@ -699,6 +699,64 @@ void main() {
       expect(soft[500], closeTo(hard[500], 3), reason: 'the middle is untouched');
     });
 
+    /// Brightness (0-255) along the middle row of a white 1920-wide full-screen child partway
+    /// through its slide by the backdrop's distance, drawn over black.
+    Future<List<int>> backdropRow(WidgetTester tester, double value, {required bool incoming, required bool coverEdges}) async {
+      tester.view.physicalSize = const Size(1920, 40);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final key = GlobalKey();
+      await tester.pumpWidget(RepaintBoundary(
+        key: key,
+        child: ColoredBox(
+          color: const Color(0xFF000000),
+          child: carouselTransition(
+            child: const ColoredBox(color: Color(0xFFFFFFFF)),
+            animation: AlwaysStoppedAnimation(value),
+            incoming: incoming,
+            direction: 1,
+            distance: 0.03,
+            coverEdges: coverEdges,
+          ),
+        ),
+      ));
+      final bytes = await tester.runAsync(() async {
+        final boundary = key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        return (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+      });
+      return [for (var x = 0; x < 1920; x++) bytes!.getUint8((20 * 1920 + x) * 4)];
+    }
+
+    testWidgets('a backdrop zoomed to cover the screen never uncovers a band at either side', (tester) async {
+      // Control: sliding alone leaves black at the side the picture moved away from.
+      final bare = await backdropRow(tester, 0.6, incoming: true, coverEdges: false);
+      expect(bare.first, lessThan(bare[960] - 50), reason: 'the arriving picture uncovers the left side');
+
+      for (final incoming in [false, true]) {
+        for (var value = 0.52; value <= 1.0; value += 0.04) {
+          final row = await backdropRow(tester, value, incoming: incoming, coverEdges: true);
+          final reason = '${incoming ? 'arriving' : 'leaving'} at $value';
+          expect(row.first, closeTo(row[960], 3), reason: reason);
+          expect(row.last, closeTo(row[960], 3), reason: reason);
+        }
+      }
+    });
+
+    test('the cover zoom is 1 at rest', () {
+      for (final incoming in [false, true]) {
+        final fade = carouselTransition(
+          child: const SizedBox(),
+          animation: const AlwaysStoppedAnimation(1),
+          incoming: incoming,
+          direction: 1,
+          coverEdges: true,
+        ) as FadeTransition;
+        final zoom = (fade.child! as SlideTransition).child! as ScaleTransition;
+        expect(zoom.scale.value, 1);
+      }
+    });
+
     testWidgets('at rest nothing is masked', (tester) async {
       await tester.pumpWidget(carouselTransition(
         child: const SizedBox(),

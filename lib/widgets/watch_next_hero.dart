@@ -67,6 +67,9 @@ int carouselDirection(int from, int to, int count) {
 /// Only the upper half of [animation] moves the child, so the two never show at once: an
 /// AnimatedSwitcher runs the outgoing child from 1 down to 0 (gone by 0.5) while the incoming one
 /// runs from 0 up to 1 (visible from 0.5).
+///
+/// With [coverEdges], the child is zoomed while it slides, just enough that it still covers its
+/// box: a full-screen picture then never uncovers what is under it. The zoom is 1 at rest.
 Widget carouselTransition({
   required Widget child,
   required Animation<double> animation,
@@ -74,11 +77,17 @@ Widget carouselTransition({
   required int direction,
   double distance = 0.06,
   bool fadeEdges = false,
+  bool coverEdges = false,
 }) {
   final begin = Offset((incoming ? direction : -direction) * distance, 0);
   final curved = CurvedAnimation(parent: animation, curve: const Interval(0.5, 1, curve: Curves.easeOutCubic));
   final position = Tween(begin: begin, end: Offset.zero).animate(curved);
-  final slid = SlideTransition(position: position, child: child);
+  final slid = SlideTransition(
+    position: position,
+    child: coverEdges
+        ? ScaleTransition(scale: Tween(begin: 1 + 2 * distance, end: 1.0).animate(curved), child: child)
+        : child,
+  );
   return FadeTransition(
     opacity: curved,
     child: fadeEdges

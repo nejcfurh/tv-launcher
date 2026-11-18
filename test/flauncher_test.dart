@@ -386,10 +386,14 @@ void main() {
     expect(images, hasLength(2));
     expect(images.where((image) => image != firstImage), hasLength(1));
 
-    // While the pictures slide, the leaving and the arriving one both fade their trailing edge
-    // instead of showing a hard band.
+    // While the pictures slide, the leaving and the arriving one are both zoomed to keep covering
+    // the screen, so neither uncovers a band at the side.
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.descendant(of: find.byKey(const ValueKey('hero_bg')), matching: find.byType(ShaderMask)), findsNWidgets(2));
+    final zooms = find.descendant(of: find.byKey(const ValueKey('hero_bg')), matching: find.byType(ScaleTransition));
+    expect(tester.widgetList<ScaleTransition>(zooms).map((zoom) => zoom.scale.value), [
+      for (var i = 0; i < 2; i++) greaterThan(1),
+    ]);
+    expect(find.descendant(of: find.byKey(const ValueKey('hero_bg')), matching: find.byType(ShaderMask)), findsNothing);
 
     // The old picture is released a second after it leaves.
     await tester.pump(const Duration(seconds: 1));
