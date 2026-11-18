@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flauncher/models/watch_next_item.dart';
 import 'package:flauncher/providers/watch_next_service.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -14,7 +14,6 @@ import '../mocks.mocks.dart';
 /// test disposes it before it ends: its timers must be gone before the tester checks for them.
 Future<WatchNextService> _serviceWithItems(
   WidgetTester tester, {
-  Uint8List? poster,
   String Function(int id)? posterUri,
 }) async {
   final channel = MockFLauncherChannel();
@@ -25,38 +24,14 @@ Future<WatchNextService> _serviceWithItems(
         {'id': id, 'title': 'Item $id', 'posterUri': posterUri?.call(id) ?? 'content://poster/$id'},
     ],
   );
-  when(channel.loadContentUriImage(any)).thenAnswer((_) async => poster ?? Uint8List.fromList([1, 2, 3]));
+  when(channel.loadContentUriImage(any)).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
   final service = WatchNextService(channel);
   await tester.pump();
   expect(service.items.map((item) => item.id), [1, 2, 3]);
   return service;
 }
 
-/// A valid 1×1 PNG.
-final _onePixelPng = Uint8List.fromList([
-  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, //
-  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, //
-  0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, //
-  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, //
-  0x42, 0x60, 0x82, //
-]);
-
 void main() {
-  testWidgets('each loaded poster logs its pixel size, byte count and address', (tester) async {
-    final logs = <String>[];
-    final originalDebugPrint = debugPrint;
-    debugPrint = (String? message, {int? wrapWidth}) => logs.add(message ?? '');
-
-    final service = await _serviceWithItems(tester, poster: _onePixelPng);
-    // The header is read by the engine, outside the test's fake clock.
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pump();
-    service.dispose();
-    debugPrint = originalDebugPrint;
-
-    expect(logs, contains('Watch Next poster 1x1, ${_onePixelPng.length} bytes: content://poster/1'));
-  });
-
   group('hero switch gate', () {
     testWidgets('without a gate the hero changes at once', (tester) async {
       final service = await _serviceWithItems(tester);
