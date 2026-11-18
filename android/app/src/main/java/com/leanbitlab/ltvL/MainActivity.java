@@ -31,6 +31,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Bundle;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Pair;
@@ -92,6 +93,52 @@ public class MainActivity extends FlutterActivity {
                 && intent.hasCategory(Intent.CATEGORY_HOME)
                 && methodChannel != null) {
             methodChannel.invokeMethod("homePressed", null);
+        }
+    }
+
+    // Whether this activity exists, so HomeButtonService only covers the stock home screen on a cold
+    // start (after boot or a crash). Returning from another app, the activity exists but its UI is
+    // not drawn; a cover there would only add a black flash.
+    private static volatile boolean created = false;
+    // Whether its UI is on screen, which is when the cover goes.
+    private static volatile boolean uiDisplayed = false;
+
+    static boolean isCreated() {
+        return created;
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        created = true;
+        super.onCreate(savedInstanceState);
+    }
+
+    @Override
+    protected void onDestroy() {
+        created = false;
+        super.onDestroy();
+    }
+
+    @Override
+    public void onFlutterUiDisplayed() {
+        super.onFlutterUiDisplayed();
+        uiDisplayed = true;
+        if (hasWindowFocus()) {
+            HomeButtonService.hideCover();
+        }
+    }
+
+    @Override
+    public void onFlutterUiNoLongerDisplayed() {
+        super.onFlutterUiNoLongerDisplayed();
+        uiDisplayed = false;
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && uiDisplayed) {
+            HomeButtonService.hideCover();
         }
     }
 

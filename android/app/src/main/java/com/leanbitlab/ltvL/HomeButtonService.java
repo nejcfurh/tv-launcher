@@ -20,8 +20,13 @@ package com.omeda.arc;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.PixelFormat;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
+import android.view.View;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
@@ -29,6 +34,11 @@ import android.view.accessibility.AccessibilityNodeInfo;
  * Google TV opens its own launcher on Home even when another app holds the HOME role, and on TCL
  * sets the key is handled before accessibility key filtering. So this service waits for the stock
  * home screen to come to the front and replaces it with this launcher.
+ *
+ * Android only switches to this launcher once it has drawn its first frame, which takes seconds on a
+ * cold start (after boot), so until then the stock home screen stays visible. On a cold start the
+ * service covers it with a black overlay that MainActivity removes when its UI shows, or that goes
+ * by itself after {@link #COVER_TIMEOUT_MS}.
  */
 public class HomeButtonService extends AccessibilityService {
     static final String STOCK_HOME_PACKAGE = "com.google.android.apps.tv.launcherx";
@@ -37,11 +47,29 @@ public class HomeButtonService extends AccessibilityService {
     // The active window can still be empty right after connecting (boot, reinstall), so check again.
     private static final long[] CONNECT_CHECK_DELAYS_MS = {0, 1000, 3000};
 
+    // Long enough for a cold start after boot (measured 2.6-5.3 s from the open request to the first
+    // frame, and the boot cover starts about 1.5 s before that request), short enough that a
+    // launcher that never shows does not leave the screen black.
+    private static final long COVER_TIMEOUT_MS = 12_000;
+
+    // After boot the service connects before the stock home screen draws (EarlyStartReceiver keeps
+    // the process running), so it covers straight away. Only this soon after boot: a later reconnect
+    // (the process restarted while another app plays) must not black out that app.
+    private static final long BOOT_COVER_WINDOW_MS = 120_000;
+
+    private static volatile HomeButtonService instance;
+
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable coverTimeout = this::removeCover;
+    private View cover;
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
+        instance = this;
+        if (SystemClock.elapsedRealtime() < BOOT_COVER_WINDOW_MS && !MainActivity.isCreated()) {
+            showCover();
+        }
         for (long delay : CONNECT_CHECK_DELAYS_MS) {
             handler.postDelayed(this::replaceStockHomeIfShowing, delay);
         }
@@ -71,11 +99,58 @@ public class HomeButtonService extends AccessibilityService {
     }
 
     private void openLauncher() {
+        if (!MainActivity.isCreated()) {
+            showCover();
+        }
         Intent intent = new Intent(this, MainActivity.class)
                 .setAction(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_HOME)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
         startActivity(intent);
+    }
+
+    private void showCover() {
+        if (cover != null) {
+            return;
+        }
+        View view = new View(this);
+        view.setBackgroundColor(Color.BLACK);
+        WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.OPAQUE);
+        try {
+            getSystemService(WindowManager.class).addView(view, params);
+        } catch (RuntimeException e) {
+            return;
+        }
+        cover = view;
+        handler.postDelayed(coverTimeout, COVER_TIMEOUT_MS);
+    }
+
+    private void removeCover() {
+        handler.removeCallbacks(coverTimeout);
+        if (cover == null) {
+            return;
+        }
+        try {
+            getSystemService(WindowManager.class).removeView(cover);
+        } catch (RuntimeException ignored) {
+        }
+        cover = null;
+    }
+
+    /** Called by MainActivity once its UI is on screen. */
+    static void hideCover() {
+        HomeButtonService service = instance;
+        if (service != null) {
+            service.handler.post(service::removeCover);
+        }
     }
 
     @Override
@@ -84,7 +159,11 @@ public class HomeButtonService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
+        removeCover();
         handler.removeCallbacksAndMessages(null);
+        if (instance == this) {
+            instance = null;
+        }
         super.onDestroy();
     }
 }
