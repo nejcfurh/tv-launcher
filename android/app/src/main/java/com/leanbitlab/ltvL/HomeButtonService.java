@@ -34,18 +34,15 @@ public class HomeButtonService extends AccessibilityService {
     static final String STOCK_HOME_PACKAGE = "com.google.android.apps.tv.launcherx";
     static final String STOCK_HOME_ACTIVITY = STOCK_HOME_PACKAGE + ".home.HomeActivity";
 
-    // The active window can still be empty right after connecting (boot, reinstall), and at boot the
-    // stock home screen comes up without an event this service sees. Checking often keeps the time
-    // it shows short.
-    private static final long CONNECT_CHECK_INTERVAL_MS = 100;
-    private static final long CONNECT_CHECK_DURATION_MS = 5000;
+    // The active window can still be empty right after connecting (boot, reinstall), so check again.
+    private static final long[] CONNECT_CHECK_DELAYS_MS = {0, 1000, 3000};
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
-        for (long delay = 0; delay <= CONNECT_CHECK_DURATION_MS; delay += CONNECT_CHECK_INTERVAL_MS) {
+        for (long delay : CONNECT_CHECK_DELAYS_MS) {
             handler.postDelayed(this::replaceStockHomeIfShowing, delay);
         }
     }
@@ -69,7 +66,6 @@ public class HomeButtonService extends AccessibilityService {
         }
         CharSequence packageName = root.getPackageName();
         if (packageName != null && STOCK_HOME_PACKAGE.contentEquals(packageName)) {
-            handler.removeCallbacksAndMessages(null);
             openLauncher();
         }
     }
