@@ -396,6 +396,34 @@ class AppLocalizationsVi extends AppLocalizations {
   String get watchNextOn => 'Xem tiếp trên';
 
   @override
+  String watchNextSeason(String season) {
+    return 'Mùa $season';
+  }
+
+  @override
+  String watchNextEpisode(String episode) {
+    return 'Tập $episode';
+  }
+
+  @override
+  String watchNextTimeLeft(String time) {
+    return 'Còn $time';
+  }
+
+  @override
+  String durationHours(int hours) {
+    return '$hours giờ';
+  }
+
+  @override
+  String durationMinutes(int minutes) {
+    return '$minutes phút';
+  }
+
+  @override
+  String get dockAllApps => 'Tất cả ứng dụng';
+
+  @override
   String get showWatchNextSection => 'Hiện mục Xem tiếp';
 
   @override

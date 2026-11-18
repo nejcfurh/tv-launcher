@@ -4,7 +4,6 @@ import 'package:flauncher/widgets/app_bar_focus_ring.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 
 import '../mocks.mocks.dart';
@@ -13,49 +12,36 @@ void main() {
   group('AppBarFocusRingPainter', () {
     test('shouldRepaint returns true when properties differ', () {
       const p1 = AppBarFocusRingPainter(
-        accentColor: Colors.blue,
         isFocused: false,
         isHovered: false,
         isPressed: false,
         progress: 1.0,
       );
       const p2 = AppBarFocusRingPainter(
-        accentColor: Colors.blue,
         isFocused: false,
         isHovered: false,
         isPressed: false,
         progress: 1.0,
       );
       const pFocused = AppBarFocusRingPainter(
-        accentColor: Colors.blue,
         isFocused: true,
         isHovered: false,
         isPressed: false,
         progress: 1.0,
       );
       const pHovered = AppBarFocusRingPainter(
-        accentColor: Colors.blue,
         isFocused: false,
         isHovered: true,
         isPressed: false,
         progress: 1.0,
       );
       const pPressed = AppBarFocusRingPainter(
-        accentColor: Colors.blue,
         isFocused: false,
         isHovered: false,
         isPressed: true,
         progress: 1.0,
       );
-      const pDifferentColor = AppBarFocusRingPainter(
-        accentColor: Colors.red,
-        isFocused: false,
-        isHovered: false,
-        isPressed: false,
-        progress: 1.0,
-      );
       const pDifferentProgress = AppBarFocusRingPainter(
-        accentColor: Colors.blue,
         isFocused: false,
         isHovered: false,
         isPressed: false,
@@ -66,7 +52,6 @@ void main() {
       expect(p1.shouldRepaint(pFocused), isTrue);
       expect(p1.shouldRepaint(pHovered), isTrue);
       expect(p1.shouldRepaint(pPressed), isTrue);
-      expect(p1.shouldRepaint(pDifferentColor), isTrue);
       expect(p1.shouldRepaint(pDifferentProgress), isTrue);
     });
 
@@ -84,8 +69,7 @@ void main() {
                 child: CustomPaint(
                   size: const Size(40, 32),
                   painter: AppBarFocusRingPainter(
-                    accentColor: Colors.blue,
-                    isFocused: state.focused,
+                                isFocused: state.focused,
                     isHovered: state.hovered,
                     isPressed: state.pressed,
                     progress: 1.0,
@@ -99,6 +83,20 @@ void main() {
       }
     });
 
+    test('focus paints only a 20% white circle, no outline', () {
+      const painter = AppBarFocusRingPainter(isFocused: true, isHovered: false, isPressed: false, progress: 1.0);
+      expect(
+        (Canvas canvas) => painter.paint(canvas, const Size(32, 32)),
+        paints
+          ..rrect(
+            rrect: RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, 32, 32), const Radius.circular(16)),
+            color: Colors.white.withValues(alpha: 0.2),
+            style: PaintingStyle.fill,
+          ),
+      );
+      expect((Canvas canvas) => painter.paint(canvas, const Size(32, 32)), paintsExactlyCountTimes(#drawRRect, 1));
+    });
+
     testWidgets('handles empty or zero-progress gracefully', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -107,8 +105,7 @@ void main() {
               child: CustomPaint(
                 size: Size.zero,
                 painter: AppBarFocusRingPainter(
-                  accentColor: Colors.blue,
-                  isFocused: true,
+                            isFocused: true,
                   isHovered: false,
                   isPressed: false,
                   progress: 0.0,
@@ -129,7 +126,6 @@ void main() {
     setUp(() {
       settingsService = MockSettingsService();
       launcherState = LauncherState();
-      when(settingsService.accentColorHex).thenReturn('6750A4');
     });
 
     Widget createTestWidget({required VoidCallback onPressed, FocusNode? focusNode}) {

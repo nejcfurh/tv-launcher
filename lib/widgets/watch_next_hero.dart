@@ -24,7 +24,7 @@ import 'package:flauncher/models/watch_next_item.dart';
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/providers/watch_next_service.dart';
-import 'package:flauncher/widgets/app_card.dart';
+import 'package:flauncher/widgets/watch_next_hero_metadata.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -39,9 +39,103 @@ void _playFocusSound(BuildContext context) {
   }
 }
 
-const double _kWatchNextHeroHorizontalPadding = kLauncherSectionHorizontalPadding + kAppCardHorizontalPadding;
+/// The hero text starts on the content keyline (x = 48), like the top bar and the dock tiles.
+const double _kWatchNextHeroHorizontalPadding = 48;
 
-class WatchNextHero extends StatelessWidget {
+/// From the top of the service row to the bottom of the Watch button, with every row present
+/// (y = 226 to 405 on a 540 dp tall screen). Rows that are missing leave space at the bottom
+/// instead of moving the hero, so the dock below never shifts.
+const double kWatchNextHeroHeight = 179;
+
+const double _kWatchButtonHeight = 36;
+
+/// Duration of the carousel change: the old item leaves in the first half, the new one arrives in
+/// the second, for the text and the backdrop alike.
+const kHeroCarouselDuration = Duration(milliseconds: 400);
+
+/// +1 when the carousel moved to the next item (wrapping around), -1 for the previous one.
+int carouselDirection(int from, int to, int count) {
+  if (count <= 1 || from == to) return 1;
+  if (to == (from + 1) % count) return 1;
+  if (to == (from - 1 + count) % count) return -1;
+  return to > from ? 1 : -1;
+}
+
+/// A slide by [distance] (a fraction of the child's width) and a fade. The incoming child comes
+/// from the side of [direction]; the outgoing one leaves towards the other side.
+///
+/// Only the upper half of [animation] moves the child, so the two never show at once: an
+/// AnimatedSwitcher runs the outgoing child from 1 down to 0 (gone by 0.5) while the incoming one
+/// runs from 0 up to 1 (visible from 0.5).
+///
+/// With [coverEdges], the child is zoomed while it slides, just enough that it still covers its
+/// box: a full-screen picture then never uncovers what is under it. The zoom is 1 at rest.
+Widget carouselTransition({
+  required Widget child,
+  required Animation<double> animation,
+  required bool incoming,
+  required int direction,
+  double distance = 0.06,
+  bool fadeEdges = false,
+  bool coverEdges = false,
+}) {
+  final begin = Offset((incoming ? direction : -direction) * distance, 0);
+  final curved = CurvedAnimation(parent: animation, curve: const Interval(0.5, 1, curve: Curves.easeOutCubic));
+  final position = Tween(begin: begin, end: Offset.zero).animate(curved);
+  final slid = SlideTransition(
+    position: position,
+    child: coverEdges
+        ? ScaleTransition(scale: Tween(begin: 1 + 2 * distance, end: 1.0).animate(curved), child: child)
+        : child,
+  );
+  return FadeTransition(
+    opacity: curved,
+    child: fadeEdges
+        ? AnimatedBuilder(
+            animation: position,
+            builder: (context, slid) => _TrailingEdgeFade(shift: position.value.dx, child: slid!),
+            child: slid,
+          )
+        : slid,
+  );
+}
+
+/// How far the trailing edge fades in, as a multiple of how far the child has slid.
+const double kCarouselEdgeFadeFactor = 4;
+
+/// Fades the edge a slid child leaves behind into whatever is under it, so a full-screen picture
+/// moving sideways shows a soft edge instead of a hard band. Nothing is faded at rest.
+///
+/// The mask sits outside the slide, in the unmoved box: it stays clear over the strip the child
+/// left and ramps up from the child's edge. Inside the slide, its edge would fall between pixels
+/// and leave the child's first, partly covered column unmasked.
+class _TrailingEdgeFade extends StatelessWidget {
+  /// How far the child has slid, as a fraction of its width (positive: moved right).
+  final double shift;
+  final Widget child;
+
+  const _TrailingEdgeFade({required this.shift, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final gap = shift.abs().clamp(0.0, 0.5);
+    final feather = (gap * kCarouselEdgeFadeFactor).clamp(0.0, 0.5);
+    if (feather == 0) return child;
+    return ShaderMask(
+      blendMode: BlendMode.dstIn,
+      shaderCallback: (bounds) => LinearGradient(
+        // Moved right: the left edge is the one on screen.
+        begin: shift > 0 ? Alignment.centerLeft : Alignment.centerRight,
+        end: shift > 0 ? Alignment.centerRight : Alignment.centerLeft,
+        colors: const [Color(0x00FFFFFF), Color(0x00FFFFFF), Color(0xFFFFFFFF)],
+        stops: [0, gap, gap + feather],
+      ).createShader(bounds),
+      child: child,
+    );
+  }
+}
+
+class WatchNextHero extends StatefulWidget {
   final List<WatchNextItem> items;
   final bool isFirstSection;
   final bool handleUpNavigationToSettings;
@@ -56,7 +150,17 @@ class WatchNextHero extends StatelessWidget {
   });
 
   @override
+  State<WatchNextHero> createState() => _WatchNextHeroState();
+}
+
+class _WatchNextHeroState extends State<WatchNextHero> {
+  bool _hasFocus = false;
+  int? _lastIndex;
+  int _direction = 1;
+
+  @override
   Widget build(BuildContext context) {
+    final items = widget.items;
     if (items.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -64,6 +168,10 @@ class WatchNextHero extends StatelessWidget {
     final watchNextService = context.watch<WatchNextService>();
     final activeItem = watchNextService.activeHeroItem ?? items.first;
     final activeIndex = watchNextService.activeHeroIndex.clamp(0, items.length - 1);
+    if (_lastIndex != null && _lastIndex != activeIndex) {
+      _direction = carouselDirection(_lastIndex!, activeIndex, items.length);
+    }
+    _lastIndex = activeIndex;
 
     final appsService = context.watch<AppsService>();
     final app = activeItem.packageName != null ? appsService.getApplication(activeItem.packageName) : null;
@@ -71,157 +179,264 @@ class WatchNextHero extends StatelessWidget {
     final localizations = AppLocalizations.of(context)!;
     final sourceBadge = (appName != null ? localizations.watchNextOn : localizations.watchNextSectionTitle)
         .toUpperCase();
+    final infoKey = ValueKey(activeItem.id);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: _kWatchNextHeroHorizontalPadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (hasFocus) {
+        if (_hasFocus != hasFocus) setState(() => _hasFocus = hasFocus);
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          _HeroInfo(
-            sourceBadge: sourceBadge,
-            sourcePackageName: app?.packageName,
-            sourceAppName: appName,
-            title: activeItem.title,
-            description: activeItem.description?.trim(),
-            progressPercent: activeItem.progressPercent,
-          ),
-          const SizedBox(height: 14),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _kWatchNextHeroHorizontalPadding),
+            child: SizedBox(
+              height: kWatchNextHeroHeight,
+              // Rows are anchored at the top and keep their natural height; a large font scale spills
+              // past the box instead of failing layout.
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                maxHeight: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedSize(
+                      duration: kHeroCarouselDuration,
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topLeft,
+                      // The leaving text slides past the left keyline while it fades; a clip here
+                      // would cut it off along x = 48 before it is gone.
+                      clipBehavior: Clip.none,
+                      child: AnimatedSwitcher(
+                        duration: kHeroCarouselDuration,
+                        layoutBuilder: (current, previous) =>
+                            Stack(alignment: Alignment.topLeft, children: [...previous, if (current != null) current]),
+                        transitionBuilder: (child, animation) => carouselTransition(
+                          child: child,
+                          animation: animation,
+                          incoming: child.key == infoKey,
+                          direction: _direction,
+                        ),
+                        child: _HeroInfo(
+                          key: infoKey,
+                          sourceBadge: sourceBadge,
+                          sourcePackageName: app?.packageName,
+                          sourceAppName: appName,
+                          item: activeItem,
+                        ),
+                      ),
+                    ),
 
-          // Action Button and Carousel indicators
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _HeroWatchButton(
-                item: activeItem,
-                autofocus: isFirstSection,
-                handleUpNavigationToSettings: handleUpNavigationToSettings,
-                onItemFocused: onItemFocused,
-                onPrev: watchNextService.prevHeroItem,
-                onNext: watchNextService.nextHeroItem,
-                totalItems: items.length,
+                    // Watch button, and the carousel dots right-aligned on the x = 912 keyline.
+                    SizedBox(
+                      height: _kWatchButtonHeight,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          _HeroWatchButton(
+                            item: activeItem,
+                            autofocus: widget.isFirstSection,
+                            handleUpNavigationToSettings: widget.handleUpNavigationToSettings,
+                            onItemFocused: widget.onItemFocused,
+                            onPrev: watchNextService.prevHeroItem,
+                            onNext: watchNextService.nextHeroItem,
+                            totalItems: items.length,
+                          ),
+                          const Spacer(),
+                          if (items.length > 1)
+                            _HeroPaginationIndicator(currentIndex: activeIndex, totalItems: items.length),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              if (items.length > 1) ...[
-                const SizedBox(width: 20),
-                _HeroPaginationIndicator(currentIndex: activeIndex, totalItems: items.length),
-              ],
-            ],
+            ),
           ),
-          const SizedBox(height: 8),
+          // Only while the hero has focus and there is somewhere to go.
+          if (_hasFocus && items.length > 1) ...[
+            const Positioned(left: _kChevronInset, top: _kChevronTop, child: _HeroChevron(pointsLeft: true)),
+            const Positioned(right: _kChevronInset, top: _kChevronTop, child: _HeroChevron(pointsLeft: false)),
+          ],
         ],
       ),
     );
   }
 }
 
-const _kBadgeTextStyle = TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.1);
+/// Chevrons sit 14 dp from the screen edges, with their top at y = 250 (24 dp below the hero's top).
+const double _kChevronInset = 14;
+const double _kChevronTop = 24;
+const double _kChevronSize = 28;
 
+class _HeroChevron extends StatelessWidget {
+  final bool pointsLeft;
+
+  const _HeroChevron({required this.pointsLeft});
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: CustomPaint(
+      key: Key(pointsLeft ? 'hero_chevron_left' : 'hero_chevron_right'),
+      size: const Size.square(_kChevronSize),
+      painter: _ChevronPainter(pointsLeft: pointsLeft),
+    ),
+  );
+}
+
+/// A thin open chevron, drawn on a 24-unit grid like the mockup's glyph.
+class _ChevronPainter extends CustomPainter {
+  final bool pointsLeft;
+
+  const _ChevronPainter({required this.pointsLeft});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 24;
+    final path = pointsLeft
+        ? (Path()
+            ..moveTo(15 * unit, 4 * unit)
+            ..lineTo(7 * unit, 12 * unit)
+            ..lineTo(15 * unit, 20 * unit))
+        : (Path()
+            ..moveTo(9 * unit, 4 * unit)
+            ..lineTo(17 * unit, 12 * unit)
+            ..lineTo(9 * unit, 20 * unit));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0x80FFFFFF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2 * unit
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChevronPainter oldDelegate) => oldDelegate.pointsLeft != pointsLeft;
+}
+
+const _kBadgeTextStyle = TextStyle(
+  color: Color(0xD9FFFFFF), // 85% white
+  fontSize: 11,
+  fontWeight: FontWeight.w700,
+  letterSpacing: 1.25,
+);
+
+const _kTitleTextStyle = TextStyle(
+  color: Colors.white,
+  fontSize: 36,
+  fontWeight: FontWeight.w700,
+  height: 1.1,
+  letterSpacing: -0.25,
+  shadows: [Shadow(color: Color(0x66000000), offset: Offset(0, 1), blurRadius: 6)],
+);
+
+// Line height and letter spacing are set here, so the theme's body text style (1.43 line height)
+// does not push the Watch button out of the hero's fixed box. 1.17 is Roboto's own line height.
+const _kMeta1TextStyle = TextStyle(
+  color: Color(0xEBFFFFFF), // 92% white
+  fontSize: 15,
+  fontWeight: FontWeight.w500,
+  height: 1.17,
+  letterSpacing: 0,
+);
+const _kMeta2TextStyle = TextStyle(color: Color(0xA6FFFFFF), fontSize: 12, height: 1.17, letterSpacing: 0); // 65%
+
+/// Service, title, metadata rows and progress. Missing rows are removed, and the rows below move
+/// up. There is no synopsis.
 class _HeroInfo extends StatelessWidget {
   final String sourceBadge;
   final String? sourcePackageName;
   final String? sourceAppName;
-  final String title;
-  final String? description;
-  final int? progressPercent;
+  final WatchNextItem item;
 
   const _HeroInfo({
+    super.key,
     required this.sourceBadge,
     this.sourcePackageName,
     this.sourceAppName,
-    required this.title,
-    required this.description,
-    required this.progressPercent,
+    required this.item,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hasDescription = description != null && description!.isNotEmpty;
-    final hasProgress = progressPercent != null && progressPercent! > 0;
+    final meta = heroMetadata(item, AppLocalizations.of(context)!);
+    final metaRows = [
+      if (meta.line1 case final line1?)
+        Text(
+          line1,
+          key: const Key('hero_meta_1'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _kMeta1TextStyle,
+        ),
+      if (meta.line2 case final line2?)
+        Text(
+          line2,
+          key: const Key('hero_meta_2'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _kMeta2TextStyle,
+        ),
+    ];
+    final progressPercent = item.progressPercent;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Source badge
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.16),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.22), width: 1),
-          ),
-          // Fixed height, so items with a logo and items with only text line up the same.
-          child: SizedBox(
-            height: 18,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(sourceBadge, maxLines: 1, style: _kBadgeTextStyle),
-                if (sourcePackageName != null)
-                  _SourceAppIcon(packageName: sourcePackageName!, appName: sourceAppName ?? ''),
-              ],
-            ),
+        // Service: plain text and logo; no border or fill, so it does not look focusable.
+        // Fixed height, so items with a logo and items with only text line up the same.
+        SizedBox(
+          key: const Key('hero_service_row'),
+          height: 18,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(sourceBadge, maxLines: 1, style: _kBadgeTextStyle),
+              if (sourcePackageName != null)
+                _SourceAppIcon(packageName: sourcePackageName!, appName: sourceAppName ?? ''),
+            ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 11),
 
-        // Title
         Text(
-          title,
+          item.title,
+          key: const Key('hero_title'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 34,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.4,
-            shadows: [Shadow(color: Colors.black87, offset: Offset(0, 2), blurRadius: 10)],
+          style: _kTitleTextStyle,
+        ),
+
+        // Text line heights round to whole dp (title 40, rows 18 and 14), so these gaps put the rows at
+        // y = 306 and 328, the progress bar at 353 and the Watch button at 369.
+        for (final (index, row) in metaRows.indexed) ...[SizedBox(height: index == 0 ? 11 : 4), row],
+
+        const SizedBox(height: 11),
+        // Only when the app reported a playback position.
+        if (progressPercent != null) ...[
+          Container(
+            key: const Key('hero_progress'),
+            width: 160,
+            height: 2,
+            decoration: BoxDecoration(color: const Color(0x4DFFFFFF), borderRadius: BorderRadius.circular(1)),
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: (progressPercent / 100).clamp(0.0, 1.0),
+              child: Container(
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(1)),
+              ),
+            ),
           ),
-        ),
-
-        // Fixed-height synopsis slot (reserves exact height for 2 lines)
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 40,
-          child: hasDescription
-              ? ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 720),
-                  child: Text(
-                    description!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 14,
-                      height: 1.35,
-                      shadows: const [Shadow(color: Colors.black87, offset: Offset(0, 1), blurRadius: 6)],
-                    ),
-                  ),
-                )
-              : null,
-        ),
-
-        // Fixed-height progress slot (reserves exact height whether in progress or not)
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 4,
-          child: hasProgress
-              ? Container(
-                  width: 140,
-                  height: 4,
-                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: (progressPercent! / 100).clamp(0.0, 1.0),
-                    child: Container(
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
-                    ),
-                  ),
-                )
-              : null,
-        ),
+          const SizedBox(height: 14),
+        ],
       ],
     );
   }
@@ -322,10 +537,8 @@ class _HeroWatchButtonState extends State<_HeroWatchButton> {
 
   @override
   Widget build(BuildContext context) {
-    final localizations = AppLocalizations.of(context)!;
-    final isResume = widget.item.progressPercent != null && widget.item.progressPercent! > 0;
-    final label = isResume ? localizations.watchNextResume : localizations.watchNextWatch;
-
+    final label = AppLocalizations.of(context)!.watchNextWatch;
+    final foreground = _isHovered ? Colors.black : Colors.white;
     final double scale = _clicked ? 0.96 : 1.0;
 
     return RepaintBoundary(
@@ -350,32 +563,25 @@ class _HeroWatchButtonState extends State<_HeroWatchButton> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOutCubic,
-              height: 48,
+              height: _kWatchButtonHeight,
               alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.only(left: 18, right: 22),
               decoration: ShapeDecoration(
+                // Focused: solid white. Unfocused: 18% white with a 40% white border.
                 shape: StadiumBorder(
-                  side: BorderSide(color: _isHovered ? Colors.white : Colors.white.withValues(alpha: 0.35), width: 1.0),
+                  side: BorderSide(color: _isHovered ? Colors.white : const Color(0x66FFFFFF), width: 1),
                 ),
-                color: _isHovered ? Colors.white : Colors.white.withValues(alpha: 0.22),
-                shadows: _isHovered
-                    ? const [BoxShadow(color: Colors.black38, blurRadius: 8, offset: Offset(0, 3))]
-                    : const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
+                color: _isHovered ? Colors.white : const Color(0x2EFFFFFF),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Icon(Icons.play_arrow_rounded, size: 24, color: _isHovered ? Colors.black87 : Colors.white),
-                  const SizedBox(width: 8),
+                  Icon(Icons.play_arrow_rounded, size: 15, color: foreground),
+                  const SizedBox(width: 7),
                   Text(
                     label,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                      color: _isHovered ? Colors.black87 : Colors.white,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: 0, color: foreground),
                   ),
                 ],
               ),
@@ -396,6 +602,7 @@ class _HeroPaginationIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      key: const Key('hero_dots'),
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: List.generate(totalItems, (i) {
@@ -403,13 +610,13 @@ class _HeroPaginationIndicator extends StatelessWidget {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
+          // 6 dp apart; the last dot ends on the keyline.
+          margin: EdgeInsets.only(left: i == 0 ? 0 : 6),
           width: isActive ? 18 : 6,
-          height: 5,
+          height: 6,
           decoration: BoxDecoration(
-            color: isActive ? Colors.white : Colors.white38,
+            color: isActive ? Colors.white : const Color(0x80FFFFFF),
             borderRadius: BorderRadius.circular(3),
-            boxShadow: isActive ? [BoxShadow(color: Colors.white.withValues(alpha: 0.6), blurRadius: 6)] : null,
           ),
         );
       }),
@@ -439,6 +646,9 @@ const Map<String, ({String asset, double height})> kSourceAppLogoAssets = {
   'com.skyshowtime.skyshowtime.google': (asset: 'assets/logo_skyshowtime.png', height: 14),
 };
 
+/// How long a service logo takes to fade in once it is decoded.
+const kSourceLogoFadeDuration = Duration(milliseconds: 150);
+
 class _SourceAppIconState extends State<_SourceAppIcon> {
   static const double _height = 18;
   static const double _maxWidth = 80;
@@ -466,6 +676,17 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
 
   Widget _name() => Text(' ${widget.appName.toUpperCase()}', maxLines: 1, style: _kBadgeTextStyle);
 
+  /// Fades the logo in when its first frame is decoded, instead of popping it in after the label.
+  static Widget _fadeInFrame(BuildContext context, Widget child, int? frame, bool wasSynchronouslyLoaded) {
+    if (wasSynchronouslyLoaded) return child;
+    return AnimatedOpacity(
+      opacity: frame == null ? 0 : 1,
+      duration: kSourceLogoFadeDuration,
+      curve: Curves.easeOut,
+      child: child,
+    );
+  }
+
   Widget _logo(Widget image) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
@@ -488,6 +709,7 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
           height: logo.height,
           fit: BoxFit.contain,
           filterQuality: FilterQuality.medium,
+          frameBuilder: _fadeInFrame,
           errorBuilder: (_, __, ___) => _name(),
         ),
       );
@@ -513,6 +735,7 @@ class _SourceAppIconState extends State<_SourceAppIcon> {
             colorBlendMode: BlendMode.srcIn,
             filterQuality: FilterQuality.medium,
             gaplessPlayback: true,
+            frameBuilder: _fadeInFrame,
             errorBuilder: (_, __, ___) => _name(),
           ),
         );

@@ -24,6 +24,7 @@ import 'package:flauncher/database.dart';
 import 'package:flauncher/flauncher.dart';
 import 'package:flauncher/flauncher_channel.dart';
 import 'package:flauncher/gradients.dart';
+import 'package:flauncher/models/watch_next_item.dart';
 import 'package:flauncher/l10n/app_localizations.dart';
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/launcher_state.dart';
@@ -36,8 +37,12 @@ import 'package:flauncher/widgets/apps_grid.dart';
 import 'package:flauncher/widgets/cached_blur_backdrop.dart';
 import 'package:flauncher/widgets/category_clean_row.dart';
 import 'package:flauncher/widgets/category_row.dart';
+import 'package:flauncher/widgets/app_card.dart';
+import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flauncher/widgets/settings/settings_panel_page.dart';
+import 'package:flauncher/widgets/vlc_cone_icon.dart';
+import 'package:flauncher/widgets/watch_next_hero.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -119,8 +124,197 @@ void main() {
     await tester.pumpAndSettle();
 
     final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
-    // Bottom margin (8) + dock outer padding (16) + dock inner padding (5).
-    expect(tester.getBottomLeft(find.byType(CategoryCleanRow)).dy, moreOrLessEquals(screenHeight - 29, epsilon: 1.5));
+    // Bottom margin (34) + tray padding (16).
+    expect(tester.getBottomLeft(find.byType(CategoryCleanRow)).dy, moreOrLessEquals(screenHeight - 50, epsilon: 1.5));
+    expect(tester.getBottomLeft(find.byKey(const Key("dock_tray"))).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+    expect(tester.getTopLeft(find.byKey(const Key("dock_tray"))).dx, 32);
+  });
+
+  testWidgets("Dock tiles are 82x42 and spread from keyline to keyline", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = List.generate(
+      8,
+      (i) => fakeApp(packageName: "me.efesser.flauncher.$i", name: "FLauncher $i", version: "1.0.0"),
+    );
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    final screenWidth = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final first = findAppCard(favorites.first.packageName);
+    final last = findAppCard(favorites.last.packageName);
+    expect(tester.getSize(first), const Size(82, 42));
+    expect(tester.getTopLeft(first).dx, 48);
+    expect(tester.getTopRight(last).dx, screenWidth - 48);
+  });
+
+  testWidgets("Dock ends with a square All apps tile when apps are listed below it", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final applicationsCategory = fakeCategory(name: "Applications", order: 1);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.dock")]),
+      CategoryWithApps(applicationsCategory, [fakeApp(packageName: "me.efesser.grid")]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    final screenWidth = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final tile = find.byType(DockAllAppsTile);
+    expect(tile, findsOneWidget);
+    expect(tester.getSize(tile), const Size(42, 42));
+    expect(tester.getTopRight(tile).dx, screenWidth - 48);
+    expect(tester.getTopLeft(findAppCard("me.efesser.dock")).dx, 48);
+  });
+
+  testWidgets("Dock has no All apps tile when nothing is listed below it", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.dock")]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DockAllAppsTile), findsNothing);
+  });
+
+  testWidgets("All apps moves focus to the first app below the dock, and Back returns to it", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final applicationsCategory = fakeCategory(name: "Applications", order: 1);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.dock")]),
+      CategoryWithApps(applicationsCategory, [
+        fakeApp(packageName: "me.efesser.grid1"),
+        fakeApp(packageName: "me.efesser.grid2"),
+      ]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+    expect(isAppCardFocused(tester, "me.efesser.dock"), isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    final allAppsElement = tester.element(find.byType(DockAllAppsTile));
+    bool allAppsFocused() => tester.widget<DockAllAppsTile>(find.byType(DockAllAppsTile)).focusNode!.hasPrimaryFocus;
+    expect(allAppsFocused(), isTrue);
+
+    // The focused grid tile pulses forever, so step time instead of settling.
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(isAppCardFocused(tester, "me.efesser.grid1"), isTrue);
+    final launcherState = Provider.of<LauncherState>(allAppsElement, listen: false);
+    expect(launcherState.appGridFocused, isTrue);
+
+    launcherState.handleBackNavigation(allAppsElement);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(allAppsFocused(), isTrue);
+    expect(launcherState.appGridFocused, isFalse);
+    expect(tester.widget<CustomScrollView>(find.byType(CustomScrollView)).controller!.offset, 0);
+  });
+
+  testWidgets("Dock hides app names even when names are on for the grid", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final applicationsCategory = fakeCategory(name: "Applications", order: 1);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.dock", name: "Dock app")]),
+      CategoryWithApps(applicationsCategory, [fakeApp(packageName: "me.efesser.grid", name: "Grid app")]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -600));
+    await tester.pumpAndSettle();
+
+    Finder nameLabel(String packageName) => find.descendant(
+      of: findAppCard(packageName),
+      matching: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_AppNameLabel'),
+    );
+    expect(nameLabel("me.efesser.dock"), findsNothing);
+    expect(nameLabel("me.efesser.grid"), findsOneWidget);
+  });
+
+  testWidgets("Focused dock tile scales up and gets the white ring; others stay as they are", (tester) async {
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+    final appsService = mkAppService();
+    final settingsService = mkSettingsService();
+    when(settingsService.showFocusBorders).thenReturn(true);
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [
+        fakeApp(packageName: "me.efesser.one", name: "One"),
+        fakeApp(packageName: "me.efesser.two", name: "Two"),
+      ]),
+    ]);
+
+    await _pumpWidgetWithProviders(tester, mkWallpaperService(), appsService, settingsService);
+    await tester.pumpAndSettle();
+    expect(isAppCardFocused(tester, "me.efesser.one"), isTrue);
+
+    double ringOpacity(String packageName) => tester
+        .widget<AnimatedOpacity>(find.descendant(of: findAppCard(packageName), matching: find.byKey(const Key("dock_focus_ring"))))
+        .opacity;
+    double tileScale(String packageName) => tester
+        .widget<AnimatedScale>(find.descendant(of: findAppCard(packageName), matching: find.byType(AnimatedScale)).at(1))
+        .scale;
+
+    expect(ringOpacity("me.efesser.one"), 1);
+    expect(tileScale("me.efesser.one"), 1.14);
+    expect(ringOpacity("me.efesser.two"), 0);
+    expect(tileScale("me.efesser.two"), 1);
+    // Unfocused dock tiles are not dimmed.
+    expect(
+      find.descendant(of: findAppCard("me.efesser.two"), matching: find.byWidgetPredicate((w) => w is ColoredBox && w.color == const Color(0x1A000000))),
+      findsNothing,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(ringOpacity("me.efesser.one"), 0);
+    expect(ringOpacity("me.efesser.two"), 1);
+  });
+
+  testWidgets("The grid's first heading stays below the screen edge until the grid is focused", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final applicationsCategory = fakeCategory(name: "Applications", order: 1);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.dock")]),
+      CategoryWithApps(applicationsCategory, [fakeApp(packageName: "me.efesser.grid")]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    expect(tester.getBottomLeft(find.byKey(const Key("dock_tray"))).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+    expect(tester.getTopLeft(find.text("Applications", skipOffstage: false)).dy, greaterThanOrEqualTo(screenHeight - 0.5));
+  });
+
+  testWidgets("Dock tray is flat: no blur behind it", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [fakeApp(packageName: "me.efesser.flauncher.1")]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key("dock_tray")), findsOneWidget);
+    expect(find.byType(CachedBlurBackdrop), findsNothing);
+    expect(find.ancestor(of: find.byType(CategoryCleanRow), matching: find.byType(BackdropFilter)), findsNothing);
   });
 
   testWidgets("Top bar shows shortcuts for installed apps and launches them", (tester) async {
@@ -136,11 +330,13 @@ void main() {
 
     expect(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), findsOneWidget);
     expect(find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), findsNothing);
-    // Play Store shows its own icon; the browser shows a globe whichever browser is installed.
+    // The Play Store shows its own icon in grayscale; the browser is a globe glyph.
+    expect(_grayscaleAppIcon("com.android.vending"), findsOneWidget);
     expect(
-      find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.android.vending")), matching: find.byType(Image)),
-      findsOneWidget,
+      find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.android.vending")), matching: find.byIcon(Icons.shop_outlined)),
+      findsNothing,
     );
+    verify(appsService.getAppIcon("com.android.vending"));
     expect(
       find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), matching: find.byIcon(Icons.public)),
       findsOneWidget,
@@ -151,7 +347,130 @@ void main() {
     verify(appsService.launchApp(browser));
   });
 
-  testWidgets("Router HDD shortcut shows the bare VLC cone", (tester) async {
+  testWidgets("A dock tile keeps its loading cover until its icon is in, then fades it off", (tester) async {
+    final appsService = mkAppService();
+    final mock = appsService as MockAppsService;
+    // No banner, so the tile loads the icon; the icon arrives when the test says so.
+    when(mock.getAppBanner(any)).thenAnswer((_) async => Uint8List(0));
+    final icon = Completer<Uint8List>();
+    final png = await mkAppService().getAppIcon("any");
+    when(mock.getAppIcon(any)).thenAnswer((_) => icon.future);
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final app = fakeApp(packageName: "me.efesser.flauncher", name: "FLauncher", version: "1.0.0");
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [app]),
+    ]);
+    await _pumpWidgetWith(tester, appsService);
+    final cover = find.descendant(
+      of: findAppCard(app.packageName),
+      matching: find.byKey(const Key('app_card_loading_cover')),
+    );
+    Iterable<double> coverOpacity() => tester
+        .widgetList<FadeTransition>(find.ancestor(of: cover, matching: find.byType(FadeTransition)))
+        .map((transition) => transition.opacity.value);
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(cover, findsOneWidget, reason: 'no icon yet');
+    expect(coverOpacity(), everyElement(1.0));
+
+    icon.complete(png);
+    for (var i = 0; i < 50 && coverOpacity().every((opacity) => opacity == 1); i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(coverOpacity(), contains(inExclusiveRange(0, 1)), reason: 'fading out');
+    await tester.pump(kAppImageFadeDuration);
+    expect(cover, findsNothing);
+  });
+
+  testWidgets("The dock stays on the bottom edge in the frame the Watch Next hero appears", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = List.generate(
+      5,
+      (i) => fakeApp(packageName: "me.efesser.flauncher.$i", name: "FLauncher $i", version: "1.0.0"),
+    );
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+    final settingsService = mkSettingsService();
+    when(settingsService.showWatchNextSection).thenReturn(true);
+    when(settingsService.watchNextBigPictureMode).thenReturn(true);
+    // Permission granted, items not loaded yet: what the home screen shows first after a cold start.
+    final watchNextService = mkWatchNextService();
+    when(watchNextService.hasPermission).thenReturn(true);
+
+    await _pumpWidgetWithProviders(tester, mkWallpaperService(), appsService, settingsService, watchNextService);
+    await tester.pumpAndSettle();
+    final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final tray = find.byKey(const Key("dock_tray"));
+    expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+
+    // The items arrive.
+    final item = WatchNextItem(id: 1, title: "The Office", posterUri: "content://poster/1");
+    when(watchNextService.items).thenReturn([item]);
+    when(watchNextService.hasItems).thenReturn(true);
+    when(watchNextService.hasVisibleSection).thenReturn(true);
+    when(watchNextService.activeHeroItem).thenReturn(item);
+    tester.element(find.byType(FLauncher)).markNeedsBuild();
+    await tester.pump();
+
+    expect(find.text("The Office"), findsWidgets, reason: 'the hero is on screen in this frame');
+    expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+  });
+
+  testWidgets("A prepared hero backdrop starts its transition in the frame the hero item changes", (tester) async {
+    final settingsService = mkSettingsService();
+    when(settingsService.showWatchNextSection).thenReturn(true);
+    when(settingsService.watchNextBigPictureMode).thenReturn(true);
+    final first = WatchNextItem(id: 1, title: "The Office", posterUri: "content://poster/1");
+    final second = WatchNextItem(id: 2, title: "Nihce", posterUri: "content://poster/2");
+    // Two separate buffers: the backdrop is keyed on the bytes' identity.
+    final posters = {"content://poster/1": _onePixelPng(), "content://poster/2": _onePixelPng()};
+    var shown = first;
+    final watchNextService = mkWatchNextService();
+    when(watchNextService.activeHeroItem).thenAnswer((_) => shown);
+    when(watchNextService.getPosterUriForItem(any))
+        .thenAnswer((invocation) => (invocation.positionalArguments.single as WatchNextItem?)?.posterUri);
+    when(watchNextService.getCachedPoster(any))
+        .thenAnswer((invocation) => posters[invocation.positionalArguments.single]);
+
+    await _pumpWidgetWithProviders(tester, mkWallpaperService(), mkAppService(), settingsService, watchNextService);
+    final gate = verify(watchNextService.heroSwitchGate = captureAny).captured.single as Future<void> Function(WatchNextItem);
+
+    // The first backdrop bakes on its own.
+    final heroBackdrop = find.descendant(of: find.byKey(const ValueKey('hero_bg')), matching: find.byType(RawImage));
+    for (var i = 0; i < 20 && heroBackdrop.evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump();
+    }
+    expect(heroBackdrop, findsOneWidget);
+    await tester.pump(kHeroCarouselDuration);
+    final firstImage = tester.widget<RawImage>(heroBackdrop).image;
+
+    // The service waits for the gate, then shows the next item.
+    await tester.runAsync(() => gate(second));
+    shown = second;
+    tester.element(find.byType(FLauncher)).markNeedsBuild();
+    await tester.pump();
+
+    // Old picture leaving and new picture arriving, from the very first frame of the change.
+    final images = tester.widgetList<RawImage>(heroBackdrop).map((raw) => raw.image).toList();
+    expect(images, hasLength(2));
+    expect(images.where((image) => image != firstImage), hasLength(1));
+
+    // While the pictures slide, the leaving and the arriving one are both zoomed to keep covering
+    // the screen, so neither uncovers a band at the side.
+    await tester.pump(const Duration(milliseconds: 300));
+    final zooms = find.descendant(of: find.byKey(const ValueKey('hero_bg')), matching: find.byType(ScaleTransition));
+    expect(tester.widgetList<ScaleTransition>(zooms).map((zoom) => zoom.scale.value), [
+      for (var i = 0; i < 2; i++) greaterThan(1),
+    ]);
+    expect(find.descendant(of: find.byKey(const ValueKey('hero_bg')), matching: find.byType(ShaderMask)), findsNothing);
+
+    // The old picture is released a second after it leaves.
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets("Router HDD shortcut shows an outline cone in the top bar glyph style", (tester) async {
     final appsService = mkAppService();
     final vlc = fakeApp(packageName: "org.videolan.vlc", name: "VLC", version: "1.0.0");
     when(appsService.categoriesWithApps).thenReturn([]);
@@ -160,14 +479,18 @@ void main() {
     await _pumpWidgetWith(tester, appsService);
     await tester.pump();
 
-    expect(
-      find.descendant(
-        of: find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")),
-        matching: find.byWidgetPredicate(
-            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/vlc_cone.png'),
-      ),
-      findsOneWidget,
-    );
+    final shortcut = find.byKey(const Key("top_bar_shortcut_org.videolan.vlc"));
+    final cone = find.descendant(of: shortcut, matching: find.byType(VlcConeIcon));
+    expect(cone, findsOneWidget);
+    expect(tester.widget<VlcConeIcon>(cone).color, const Color(0xCCFFFFFF));
+    // Same box as the settings and globe glyphs, and drawn, not a picture.
+    expect(tester.getSize(cone), const Size(18, 18));
+    expect(find.descendant(of: shortcut, matching: find.byType(Image)), findsNothing);
+    verifyNever(appsService.getAppIcon("org.videolan.vlc"));
+
+    await tester.tap(shortcut);
+    await tester.pump();
+    verify(appsService.launchApp(vlc));
   });
 
   testWidgets("Browser shortcut prefers TV Bro over the TCL browser", (tester) async {
@@ -211,6 +534,16 @@ void main() {
     await _pumpWidgetWithProviders(tester, mkWallpaperService(false), appsService, mkSettingsService());
 
     expect(find.byKey(Key("background")), findsOneWidget);
+  });
+
+  testWidgets("Wallpaper gets the top and bottom scrims", (tester) async {
+    final appsService = mkAppService();
+    when(appsService.categoriesWithApps).thenReturn([]);
+
+    await _pumpWidgetWith(tester, appsService);
+
+    expect(find.byKey(const Key("wallpaper_scrim")), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key("wallpaper_scrim"))), tester.view.physicalSize / tester.view.devicePixelRatio);
   });
 
   testWidgets("Default build credits the Unsplash photographer", (tester) async {
@@ -693,6 +1026,26 @@ WallpaperService mkWallpaperService([bool wallpaper = true]) {
   when(wallpaperService.redditWallpaperCredit).thenReturn(null);
   return wallpaperService;
 }
+
+/// A valid 1×1 PNG in a new buffer each call.
+Uint8List _onePixelPng() => Uint8List.fromList([
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, //
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, //
+      0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, //
+      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, //
+      0x42, 0x60, 0x82, //
+    ]);
+
+/// An app's launcher icon (from [AppsService.getAppIcon]) under the grayscale filter, inside the
+/// top bar shortcut for [packageName].
+Finder _grayscaleAppIcon(String packageName) => find.descendant(
+      of: find.byKey(Key("top_bar_shortcut_$packageName")),
+      matching: find.byWidgetPredicate((w) =>
+          w is ColorFiltered &&
+          w.colorFilter == kTopBarGrayscale &&
+          w.child is Image &&
+          (w.child as Image).image is MemoryImage),
+    );
 
 AppsService mkAppService() {
   final appsService = MockAppsService();

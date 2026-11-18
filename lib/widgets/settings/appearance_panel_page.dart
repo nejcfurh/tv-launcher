@@ -26,28 +26,10 @@ class AppearancePanelPage extends StatelessWidget {
             children: [
               RoundedSwitchListTile(
                 autofocus: true,
-                value: !settingsService.dockBackdropFilterDisabled,
-                onChanged: (value) => settingsService.setDockBackdropFilterDisabled(!value),
-                title: Text(localizations.dockBlur, style: Theme.of(context).textTheme.bodyMedium),
-                secondary: const Icon(Icons.blur_circular),
-              ),
-              RoundedSwitchListTile(
                 value: !settingsService.backgroundBlurDisabled,
                 onChanged: (value) => settingsService.setBackgroundBlurDisabled(!value),
                 title: Text(localizations.backgroundBlur, style: Theme.of(context).textTheme.bodyMedium),
                 secondary: const Icon(Icons.blur_on),
-              ),
-              RoundedSwitchListTile(
-                value: settingsService.dockShadowEnabled,
-                onChanged: settingsService.setDockShadowEnabled,
-                title: Text(localizations.dockShadow, style: Theme.of(context).textTheme.bodyMedium),
-                secondary: const Icon(Icons.layers),
-              ),
-              RoundedSwitchListTile(
-                value: settingsService.dockDarkBackground,
-                onChanged: settingsService.setDockDarkBackground,
-                title: Text(localizations.dockDarkBackground, style: Theme.of(context).textTheme.bodyMedium),
-                secondary: const Icon(Icons.dark_mode),
               ),
               FocusableSettingsTile(
                 showChevron: true,

@@ -26,6 +26,37 @@ import 'package:flauncher/models/watch_next_item.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:http/http.dart' as http;
 
+/// The width the hero backdrop fills: the screen at 1080p.
+const int kArtworkTargetWidth = 1920;
+
+/// [uri] asking its image server for a backdrop [kArtworkTargetWidth] wide, when the link carries
+/// a smaller size the server lets us change; otherwise [uri] itself.
+///
+/// Disney+ and HBO Max publish 544 and 600 px wide images in Watch Next, which look soft
+/// stretched across the screen; both servers return 1920 px when the link asks for it.
+Uri largerArtworkUri(Uri uri) {
+  final host = uri.host;
+  final query = uri.queryParameters;
+  // Disney+: ripcut-delivery …/scale?format=webp&height=306&width=544
+  if (host.endsWith('bamgrid.com') && uri.path.contains('/ripcut-delivery/') && uri.path.endsWith('/scale')) {
+    final width = int.tryParse(query['width'] ?? '');
+    final height = int.tryParse(query['height'] ?? '');
+    if (width == null || height == null || width <= 0 || width >= kArtworkTargetWidth) return uri;
+    return uri.replace(queryParameters: {
+      ...query,
+      'width': '$kArtworkTargetWidth',
+      'height': '${(height * kArtworkTargetWidth / width).round()}',
+    });
+  }
+  // HBO Max: images.cdn.prd.api.discomax.com/…?w=600&q=85&p=true&f=jpg
+  if (host.endsWith('discomax.com')) {
+    final width = int.tryParse(query['w'] ?? '');
+    if (width == null || width <= 0 || width >= kArtworkTargetWidth) return uri;
+    return uri.replace(queryParameters: {...query, 'w': '$kArtworkTargetWidth'});
+  }
+  return uri;
+}
+
 class WatchNextService extends ChangeNotifier {
   final FLauncherChannel _fLauncherChannel;
   final SettingsService? _settingsService;
@@ -75,25 +106,57 @@ class WatchNextService extends ChangeNotifier {
     return true;
   }
 
+  /// Runs before the hero shows another item, and the change waits for it (at most
+  /// [heroSwitchMaxWait]). The home screen bakes the item's backdrop here, so the text and the
+  /// picture start their transition in the same frame.
+  Future<void> Function(WatchNextItem item)? heroSwitchGate;
+
+  static const heroSwitchMaxWait = Duration(milliseconds: 600);
+
+  /// The index the user moved to while [heroSwitchGate] is still running; null when none is pending.
+  int? _requestedHeroIndex;
+  int _heroRequest = 0;
+
   void setActiveHeroIndex(int index) {
     if (_items.isEmpty) return;
     final clamped = index.clamp(0, _items.length - 1);
-    if (_activeHeroIndex != clamped) {
-      _activeHeroIndex = clamped;
-      _ensureActiveHeroImageLoaded();
-      notifyListeners();
+    if (clamped == (_requestedHeroIndex ?? _activeHeroIndex)) return;
+    final request = ++_heroRequest;
+    final gate = heroSwitchGate;
+    // Back to the item on screen: its backdrop is already there.
+    if (gate == null || clamped == _activeHeroIndex) {
+      _commitHeroIndex(clamped);
+      return;
     }
+    _requestedHeroIndex = clamped;
+    final item = _items[clamped];
+    ensurePosterLoaded(getPosterUriForItem(item));
+    // A slow or failing gate only delays the change; it never blocks the carousel.
+    unawaited(Future.sync(() => gate(item))
+        .timeout(heroSwitchMaxWait)
+        .catchError((Object _) {})
+        .whenComplete(() {
+      if (request == _heroRequest) _commitHeroIndex(clamped);
+    }));
+  }
+
+  void _commitHeroIndex(int index) {
+    _requestedHeroIndex = null;
+    if (index >= _items.length || index == _activeHeroIndex) return;
+    _activeHeroIndex = index;
+    _ensureActiveHeroImageLoaded();
+    notifyListeners();
   }
 
   void nextHeroItem() {
     if (_items.isEmpty) return;
-    final next = (_activeHeroIndex + 1) % _items.length;
+    final next = ((_requestedHeroIndex ?? _activeHeroIndex) + 1) % _items.length;
     setActiveHeroIndex(next);
   }
 
   void prevHeroItem() {
     if (_items.isEmpty) return;
-    final prev = (_activeHeroIndex - 1 + _items.length) % _items.length;
+    final prev = ((_requestedHeroIndex ?? _activeHeroIndex) - 1 + _items.length) % _items.length;
     setActiveHeroIndex(prev);
   }
 
@@ -215,6 +278,9 @@ class WatchNextService extends ChangeNotifier {
       filtered = filtered.take(maxItems);
     }
     _items = filtered.toList();
+    // A pending hero change pointed into the old list.
+    _heroRequest++;
+    _requestedHeroIndex = null;
 
     if (_activeHeroIndex >= _items.length) {
       _activeHeroIndex = 0;
@@ -296,10 +362,12 @@ class WatchNextService extends ChangeNotifier {
       if (uri.startsWith('content://')) {
         imageBytes = await _fLauncherChannel.loadContentUriImage(uri);
       } else {
-        final uriObj = Uri.parse(uri);
-        final response = await http.get(uriObj).timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200) {
-          imageBytes = response.bodyBytes;
+        final published = Uri.parse(uri);
+        final larger = largerArtworkUri(published);
+        imageBytes = await _download(larger);
+        // The image server may refuse the size we asked for; the published link still works.
+        if ((imageBytes == null || imageBytes.isEmpty) && larger != published) {
+          imageBytes = await _download(published);
         }
       }
 
@@ -326,6 +394,15 @@ class WatchNextService extends ChangeNotifier {
       }
     } finally {
       _loadingPosters.remove(uri);
+    }
+  }
+
+  Future<Uint8List?> _download(Uri uri) async {
+    try {
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      return response.statusCode == 200 ? response.bodyBytes : null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -459,29 +536,6 @@ class WatchNextService extends ChangeNotifier {
     final titleX = (width - titlePainter.width) / 2;
     const titleY = 175.0;
     titlePainter.paint(canvas, Offset(titleX, titleY));
-
-    // Program description
-    if (item.description != null && item.description!.trim().isNotEmpty) {
-      final descSpan = TextSpan(
-        text: item.description!.trim(),
-        style: const TextStyle(
-          color: Color(0x88FFFFFF),
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
-        ),
-      );
-      final descPainter = TextPainter(
-        text: descSpan,
-        textAlign: TextAlign.center,
-        textDirection: TextDirection.ltr,
-        maxLines: 1,
-        ellipsis: '...',
-      )..layout(maxWidth: width - 100);
-
-      final descX = (width - descPainter.width) / 2;
-      final descY = titleY + titlePainter.height + 8;
-      descPainter.paint(canvas, Offset(descX, descY));
-    }
 
     // Subtle edge border
     final borderPaint = Paint()

@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flauncher/l10n/app_localizations.dart';
 import 'package:flauncher/models/app.dart';
@@ -9,6 +9,8 @@ import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/providers/watch_next_service.dart';
 import 'package:flauncher/widgets/watch_next_hero.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
@@ -17,6 +19,9 @@ import '../mocks.dart';
 import '../mocks.mocks.dart';
 
 class TestWatchNextService extends ChangeNotifier implements WatchNextService {
+  @override
+  Future<void> Function(WatchNextItem item)? heroSwitchGate;
+
   List<WatchNextItem> _items = [];
   int _activeHeroIndex = 0;
   WatchNextItem? launchedItem;
@@ -203,14 +208,16 @@ void main() {
       );
     }
 
-    testWidgets('renders title, description, badge, and Resume button', (tester) async {
+    testWidgets('renders title, badge and Watch, and never the synopsis', (tester) async {
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
 
       expect(find.text('Severance'), findsOneWidget);
-      expect(find.textContaining('Mark leads a team'), findsOneWidget);
+      expect(find.textContaining('Mark leads a team'), findsNothing);
       expect(find.text('WATCH NEXT ON'), findsOneWidget);
-      expect(find.text('Resume'), findsOneWidget);
+      // The label stays "Watch" even for an item with progress.
+      expect(find.text('Watch'), findsOneWidget);
+      expect(find.text('Resume'), findsNothing);
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     });
 
@@ -248,6 +255,27 @@ void main() {
       expect(find.textContaining('DISNEY'), findsNothing);
     });
 
+    testWidgets('badge logo fades in once it is decoded instead of popping in', (tester) async {
+      // A logo already in the image cache shows at once, without a fade: start from a cold cache.
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      appsService.foregroundIcon = Uint8List.fromList(_onePixelPng);
+      watchNextService.testItems = disneyItems;
+      await tester.pumpWidget(createTestWidget(items: disneyItems));
+      await tester.pump();
+      await tester.pump();
+      final badgeRow = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Row)).first;
+      final fade = find.descendant(of: badgeRow, matching: find.byType(AnimatedOpacity));
+      expect(tester.widget<AnimatedOpacity>(fade).opacity, 0, reason: 'not decoded yet');
+
+      for (var i = 0; i < 50 && tester.widget<AnimatedOpacity>(fade).opacity == 0; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
+      expect(tester.widget<AnimatedOpacity>(fade).opacity, 1);
+      expect(tester.widget<AnimatedOpacity>(fade).duration, kSourceLogoFadeDuration);
+    });
+
     testWidgets('badge names the source app when it has no icon', (tester) async {
       appsService.foregroundIcon = Uint8List(0);
       watchNextService.testItems = disneyItems;
@@ -261,8 +289,7 @@ void main() {
     testWidgets('badge keeps the same height with a logo and with only a name', (tester) async {
       Future<double> badgeHeight() async {
         await tester.pumpAndSettle();
-        final badge = find.ancestor(of: find.text('WATCH NEXT ON'), matching: find.byType(Container)).first;
-        return tester.getSize(badge).height;
+        return tester.getSize(find.byKey(const Key('hero_service_row'))).height;
       }
 
       await tester.pumpWidget(createTestWidget());
@@ -274,6 +301,219 @@ void main() {
       final withName = await badgeHeight();
 
       expect(withName, withLogo);
+    });
+
+    testWidgets('service row has no border or fill', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(
+        find.ancestor(
+          of: find.text('WATCH NEXT ON'),
+          matching: find.byWidgetPredicate((w) => w is Container && w.decoration != null),
+        ),
+        findsNothing,
+      );
+    });
+
+    final fullSeriesItem = WatchNextItem(
+      id: 10,
+      title: 'The Office (U.S.)',
+      packageName: 'com.netflix.ninja',
+      programType: kWatchNextTypeTvEpisode,
+      seasonNumber: '5',
+      episodeNumber: '12',
+      duration: 22 * 60000,
+      playbackPositionMillis: 13 * 60000,
+      progressPercent: 59,
+      genres: const ['COMEDY'],
+    );
+
+    testWidgets('series shows season, episode, time left, genre and progress', (tester) async {
+      watchNextService.testItems = [fullSeriesItem];
+      await tester.pumpWidget(createTestWidget(items: [fullSeriesItem]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Season 5 · Episode 12 · 9 min left'), findsOneWidget);
+      expect(find.text('Comedy'), findsOneWidget);
+      expect(tester.getSize(find.byKey(const Key('hero_progress'))), const Size(160, 2));
+    });
+
+    testWidgets('with every row present the Watch button ends exactly at the bottom of the hero box', (tester) async {
+      watchNextService.testItems = [fullSeriesItem];
+      await tester.pumpWidget(createTestWidget(items: [fullSeriesItem]));
+      await tester.pumpAndSettle();
+
+      final heroTop = tester.getTopLeft(find.byType(WatchNextHero)).dy;
+      final button = find.ancestor(of: find.text('Watch'), matching: find.byType(AnimatedContainer));
+      expect(tester.getBottomLeft(button).dy - heroTop, moreOrLessEquals(kWatchNextHeroHeight, epsilon: 0.5));
+      // Rows sit where the spec puts them, relative to the service row at y = 226.
+      expect(tester.getTopLeft(find.byKey(const Key('hero_title'))).dy - heroTop, moreOrLessEquals(29, epsilon: 0.5));
+      expect(tester.getTopLeft(find.byKey(const Key('hero_meta_1'))).dy - heroTop, moreOrLessEquals(80, epsilon: 0.5));
+      expect(tester.getTopLeft(find.byKey(const Key('hero_progress'))).dy - heroTop, moreOrLessEquals(127, epsilon: 0.5));
+    });
+
+    testWidgets('missing rows are removed and the Watch button moves up', (tester) async {
+      watchNextService.testItems = [fullSeriesItem];
+      await tester.pumpWidget(createTestWidget(items: [fullSeriesItem]));
+      await tester.pumpAndSettle();
+      final fullButtonTop = tester.getTopLeft(find.text('Watch')).dy;
+      final heroHeight = tester.getSize(find.byType(WatchNextHero)).height;
+
+      final bare = WatchNextItem(id: 11, title: 'Bare item', packageName: 'com.netflix.ninja', description: 'A synopsis');
+      watchNextService.testItems = [bare];
+      await tester.pumpWidget(createTestWidget(items: [bare]));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('hero_meta_1')), findsNothing);
+      expect(find.byKey(const Key('hero_meta_2')), findsNothing);
+      expect(find.byKey(const Key('hero_progress')), findsNothing);
+      expect(find.text('A synopsis'), findsNothing);
+      expect(tester.getTopLeft(find.text('Watch')).dy, lessThan(fullButtonTop));
+      // The hero keeps its height, so the dock below does not move.
+      expect(tester.getSize(find.byType(WatchNextHero)).height, heroHeight);
+    });
+
+    testWidgets('no playback position: no progress bar and no time left', (tester) async {
+      final noPosition = WatchNextItem(
+        id: 12,
+        title: 'The Office (U.S.)',
+        packageName: 'com.netflix.ninja',
+        programType: kWatchNextTypeTvEpisode,
+        seasonNumber: '5',
+        episodeNumber: '12',
+        duration: 22 * 60000,
+      );
+      watchNextService.testItems = [noPosition];
+      await tester.pumpWidget(createTestWidget(items: [noPosition]));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Season 5 · Episode 12'), findsOneWidget);
+      expect(find.textContaining('left'), findsNothing);
+      expect(find.byKey(const Key('hero_progress')), findsNothing);
+    });
+
+    testWidgets('chevrons show only while the hero has focus and there is more than one item', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+      // The Watch button autofocuses (isFirstSection).
+      expect(find.byKey(const Key('hero_chevron_left')), findsOneWidget);
+      expect(find.byKey(const Key('hero_chevron_right')), findsOneWidget);
+      expect(tester.getTopLeft(find.byKey(const Key('hero_chevron_left'))).dx, 14);
+      final width = tester.getSize(find.byType(WatchNextHero)).width;
+      expect(tester.getTopRight(find.byKey(const Key('hero_chevron_right'))).dx, width - 14);
+
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('hero_chevron_left')), findsNothing);
+      expect(find.byKey(const Key('hero_chevron_right')), findsNothing);
+    });
+
+    testWidgets('a single item has no chevrons and no dots', (tester) async {
+      final single = [sampleItems.first];
+      watchNextService.testItems = single;
+      await tester.pumpWidget(createTestWidget(items: single));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('hero_chevron_left')), findsNothing);
+      expect(find.byKey(const Key('hero_dots')), findsNothing);
+    });
+
+    testWidgets('dots end on the right keyline, centred on the Watch button', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+      final width = tester.getSize(find.byType(WatchNextHero)).width;
+      final dots = find.byKey(const Key('hero_dots'));
+      expect(tester.getTopRight(dots).dx, width - 48);
+      expect(tester.getSize(dots).height, 6);
+      final button = find.ancestor(of: find.text('Watch'), matching: find.byType(AnimatedContainer));
+      expect(tester.getCenter(dots).dy, moreOrLessEquals(tester.getCenter(button).dy, epsilon: 0.5));
+      expect(tester.getSize(button).height, 36);
+    });
+
+    testWidgets('Left and Right swap the text in 400 ms without showing both items at once', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      double opacityOf(String title) {
+        final finder = find.text(title);
+        if (finder.evaluate().isEmpty) return 0;
+        return tester
+            .widgetList<FadeTransition>(find.ancestor(of: finder, matching: find.byType(FadeTransition)))
+            .fold(1.0, (opacity, fade) => opacity * fade.opacity.value);
+      }
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      var sawOld = false;
+      var sawNew = false;
+      for (var elapsed = 0; elapsed < 400; elapsed += 20) {
+        final old = opacityOf('Severance');
+        final next = opacityOf('Ted Lasso');
+        expect(old > 0 && next > 0, isFalse, reason: 'both visible at $elapsed ms: $old / $next');
+        sawOld |= old > 0;
+        sawNew |= next > 0;
+        if (elapsed == 100) expect(next, 0, reason: 'the new item waits until the old one is gone');
+        if (elapsed == 300) expect(old, 0, reason: 'the old item is gone by the second half');
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(sawOld, isTrue);
+      expect(sawNew, isTrue);
+
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(find.text('Severance'), findsNothing);
+      expect(opacityOf('Ted Lasso'), 1);
+    });
+
+    testWidgets('the leaving text is not cut off at the left keyline while it slides away', (tester) async {
+      // The next item is larger, so the hero grows while the old title slides out.
+      watchNextService.testItems = [
+        sampleItems[0],
+        WatchNextItem(
+          id: 3,
+          title: 'Ted Lasso: The Complete Series',
+          packageName: 'com.netflix.ninja',
+          seasonNumber: '3',
+          episodeNumber: '12',
+          genres: const ['COMEDY'],
+          releaseDate: '2023',
+          playbackPositionMillis: 600000,
+          duration: 1800000,
+          progressPercent: 33,
+        ),
+      ];
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+      final keyline = tester.getTopLeft(find.byType(WatchNextHero)).dx + 48;
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // The old title is still showing and has moved left of the keyline.
+      final title = find.text('Severance');
+      final titleRect = tester.getRect(title);
+      expect(titleRect.left, lessThan(keyline - 2));
+
+      // Its pixels left of the keyline are drawn, not cut off while the hero resizes to the new item.
+      RenderObject node = tester.renderObject(find.byType(WatchNextHero));
+      while (!node.isRepaintBoundary) {
+        node = node.parent!;
+      }
+      final boundary = node as RenderBox;
+      final origin = boundary.localToGlobal(Offset.zero);
+      final bytes = await tester.runAsync(() async {
+        final image = await (boundary.debugLayer! as OffsetLayer).toImage(Offset.zero & boundary.size);
+        return (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+      });
+      final width = boundary.size.width.round();
+      int pixelAt(double x, double y) =>
+          bytes!.getUint32((((y - origin.dy).round()) * width + (x - origin.dx).round()) * 4);
+      final y = titleRect.center.dy;
+      // Ink is anything that differs from the background at the screen edge, in the same row.
+      final background = pixelAt(origin.dx + 1, y);
+      // Control: the detector sees the title right of the keyline.
+      expect(pixelAt(keyline + 4, y), isNot(background));
+      expect(pixelAt(keyline - 1, y), isNot(background), reason: 'title cut off at the keyline');
     });
 
     test('every bundled source logo exists', () {
@@ -291,7 +531,7 @@ void main() {
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Resume'));
+      await tester.tap(find.text('Watch'));
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(watchNextService.launchedItem?.title, 'Severance');
@@ -323,18 +563,18 @@ void main() {
       final buttonFinder = find.byType(AnimatedContainer);
       expect(buttonFinder, findsWidgets);
 
-      // Find the AnimatedContainer corresponding to the button (the one with height 48)
+      // Find the AnimatedContainer corresponding to the button (the one with height 36)
       final watchButtonContainer = tester.widget<AnimatedContainer>(
         find.ancestor(
-          of: find.text('Resume'),
+          of: find.text('Watch'),
           matching: find.byType(AnimatedContainer),
         ),
       );
-      expect(watchButtonContainer.constraints?.maxHeight ?? 48.0, 48.0);
+      expect(watchButtonContainer.constraints?.maxHeight, 36.0);
 
       final initialSize = tester.getSize(
         find.ancestor(
-          of: find.text('Resume'),
+          of: find.text('Watch'),
           matching: find.byType(AnimatedContainer),
         ),
       );
@@ -345,7 +585,7 @@ void main() {
 
       final unfocusedSize = tester.getSize(
         find.ancestor(
-          of: find.text('Resume'),
+          of: find.text('Watch'),
           matching: find.byType(AnimatedContainer),
         ),
       );
@@ -387,6 +627,166 @@ void main() {
       final sizeWithoutSynopsis = tester.getSize(heroFinder);
 
       expect(sizeWithoutSynopsis.height, equals(sizeWithSynopsis.height));
+    });
+  });
+
+  group('carouselDirection', () {
+    test('next and previous, wrapping around the ends', () {
+      expect(carouselDirection(0, 1, 6), 1);
+      expect(carouselDirection(5, 0, 6), 1);
+      expect(carouselDirection(1, 0, 6), -1);
+      expect(carouselDirection(0, 5, 6), -1);
+    });
+
+    test('a jump goes the way the index moved', () {
+      expect(carouselDirection(1, 4, 6), 1);
+      expect(carouselDirection(4, 1, 6), -1);
+    });
+  });
+
+  group('carouselTransition', () {
+    // An AnimatedSwitcher runs the incoming child 0 → 1 and the outgoing one 1 → 0 over the same
+    // time, so at elapsed fraction t the incoming value is t and the outgoing value is 1 - t.
+    double opacityAt(double value, {required bool incoming}) {
+      final fade = carouselTransition(
+        child: const SizedBox(),
+        animation: AlwaysStoppedAnimation(value),
+        incoming: incoming,
+        direction: 1,
+      ) as FadeTransition;
+      return fade.opacity.value;
+    }
+
+    test('the outgoing child is gone before the incoming one appears', () {
+      for (var t = 0.0; t <= 1.0; t += 0.05) {
+        final outgoing = opacityAt(1 - t, incoming: false);
+        final incoming = opacityAt(t, incoming: true);
+        expect(outgoing > 0 && incoming > 0, isFalse, reason: 't = $t: $outgoing / $incoming');
+      }
+      expect(opacityAt(1, incoming: false), 1);
+      expect(opacityAt(0.5, incoming: false), 0);
+      expect(opacityAt(0.5, incoming: true), 0);
+      expect(opacityAt(1, incoming: true), 1);
+    });
+
+    /// Brightness (0-255) along the middle row of a white 1000×40 child that came in from the right
+    /// and is partway through its slide, drawn over black.
+    Future<List<int>> slidRow(WidgetTester tester, {required bool fadeEdges}) async {
+      final key = GlobalKey();
+      await tester.pumpWidget(Center(
+        child: RepaintBoundary(
+          key: key,
+          child: Container(
+            width: 1000,
+            height: 40,
+            color: const Color(0xFF000000),
+            child: carouselTransition(
+              child: const ColoredBox(color: Color(0xFFFFFFFF)),
+              animation: const AlwaysStoppedAnimation(0.6),
+              incoming: true,
+              direction: 1,
+              distance: 0.03,
+              fadeEdges: fadeEdges,
+            ),
+          ),
+        ),
+      ));
+      final bytes = await tester.runAsync(() async {
+        final boundary = key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        return (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+      });
+      return [for (var x = 0; x < 1000; x++) bytes!.getUint8((20 * 1000 + x) * 4)];
+    }
+
+    testWidgets('a sliding backdrop fades its trailing edge instead of showing a hard band', (tester) async {
+      // Control: without the fade, the picture is at full brightness one column past its edge (the
+      // edge column itself is partly covered, since the slide stops between pixels).
+      final hard = await slidRow(tester, fadeEdges: false);
+      final hardEdge = hard.indexWhere((v) => v > 2);
+      expect(hardEdge, greaterThan(0), reason: 'the child has slid right, leaving a dark band');
+      expect(hard[hardEdge + 1], closeTo(hard[500], 3));
+
+      final soft = await slidRow(tester, fadeEdges: true);
+      final softEdge = soft.indexWhere((v) => v > 2);
+      expect(softEdge, greaterThan(hardEdge), reason: 'no partly covered column left unmasked');
+      expect(soft[softEdge], lessThan(soft[500] * 0.25), reason: 'the edge starts faint');
+      // Brightness rises steadily to full over the fade.
+      final fadeEnd = soft.indexWhere((v) => v >= soft[500] - 2);
+      expect(fadeEnd - softEdge, greaterThan(20));
+      for (var x = softEdge + 1; x <= fadeEnd; x++) {
+        expect(soft[x], greaterThanOrEqualTo(soft[x - 1]), reason: 'column $x');
+      }
+      expect(soft[500], closeTo(hard[500], 3), reason: 'the middle is untouched');
+    });
+
+    /// Brightness (0-255) along the middle row of a white 1920-wide full-screen child partway
+    /// through its slide by the backdrop's distance, drawn over black.
+    Future<List<int>> backdropRow(WidgetTester tester, double value, {required bool incoming, required bool coverEdges}) async {
+      tester.view.physicalSize = const Size(1920, 40);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final key = GlobalKey();
+      await tester.pumpWidget(RepaintBoundary(
+        key: key,
+        child: ColoredBox(
+          color: const Color(0xFF000000),
+          child: carouselTransition(
+            child: const ColoredBox(color: Color(0xFFFFFFFF)),
+            animation: AlwaysStoppedAnimation(value),
+            incoming: incoming,
+            direction: 1,
+            distance: 0.03,
+            coverEdges: coverEdges,
+          ),
+        ),
+      ));
+      final bytes = await tester.runAsync(() async {
+        final boundary = key.currentContext!.findRenderObject() as RenderRepaintBoundary;
+        final image = await boundary.toImage();
+        return (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+      });
+      return [for (var x = 0; x < 1920; x++) bytes!.getUint8((20 * 1920 + x) * 4)];
+    }
+
+    testWidgets('a backdrop zoomed to cover the screen never uncovers a band at either side', (tester) async {
+      // Control: sliding alone leaves black at the side the picture moved away from.
+      final bare = await backdropRow(tester, 0.6, incoming: true, coverEdges: false);
+      expect(bare.first, lessThan(bare[960] - 50), reason: 'the arriving picture uncovers the left side');
+
+      for (final incoming in [false, true]) {
+        for (var value = 0.52; value <= 1.0; value += 0.04) {
+          final row = await backdropRow(tester, value, incoming: incoming, coverEdges: true);
+          final reason = '${incoming ? 'arriving' : 'leaving'} at $value';
+          expect(row.first, closeTo(row[960], 3), reason: reason);
+          expect(row.last, closeTo(row[960], 3), reason: reason);
+        }
+      }
+    });
+
+    test('the cover zoom is 1 at rest', () {
+      for (final incoming in [false, true]) {
+        final fade = carouselTransition(
+          child: const SizedBox(),
+          animation: const AlwaysStoppedAnimation(1),
+          incoming: incoming,
+          direction: 1,
+          coverEdges: true,
+        ) as FadeTransition;
+        final zoom = (fade.child! as SlideTransition).child! as ScaleTransition;
+        expect(zoom.scale.value, 1);
+      }
+    });
+
+    testWidgets('at rest nothing is masked', (tester) async {
+      await tester.pumpWidget(carouselTransition(
+        child: const SizedBox(),
+        animation: const AlwaysStoppedAnimation(1),
+        incoming: true,
+        direction: 1,
+        fadeEdges: true,
+      ));
+      expect(find.byType(ShaderMask), findsNothing);
     });
   });
 }

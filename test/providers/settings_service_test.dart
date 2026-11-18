@@ -19,7 +19,10 @@
 //import 'dart:html';
 
 import 'package:flauncher/providers/settings_service.dart';
+import 'package:flauncher/widgets/settings/date_time_format_page.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
@@ -126,6 +129,13 @@ void main() async {
   group("getDateFormat", ()  {
     test("with default", () async {
       expect(settingsService.dateFormat, SettingsService.defaultDateFormat);
+    });
+
+    test("defaults to the short weekday, day and month, which is a preset", () async {
+      await initializeDateFormatting('en');
+      expect(SettingsService.defaultDateFormat, "EEE d MMM");
+      expect(dateFormatPresets.map((preset) => preset.$1), contains(SettingsService.defaultDateFormat));
+      expect(DateFormat(SettingsService.defaultDateFormat, 'en').format(DateTime(2026, 11, 17)), "Tue 17 Nov");
     });
 
     test("with value set", () async {

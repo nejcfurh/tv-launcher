@@ -35,10 +35,10 @@ import 'package:flauncher/widgets/app_card.dart';
 import 'package:flauncher/widgets/cached_blur_backdrop.dart';
 import 'package:flauncher/widgets/category_clean_row.dart';
 import 'package:flauncher/widgets/category_row.dart';
-import 'package:flauncher/widgets/dock_contour_painter.dart';
 import 'package:flauncher/widgets/launcher_alternative_view.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/wallpaper_video_background.dart';
+import 'package:flauncher/widgets/watch_next_hero.dart';
 import 'package:flauncher/widgets/watch_next_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -47,16 +47,17 @@ import 'package:flauncher/l10n/app_localizations.dart';
 
 import 'models/app.dart';
 import 'models/category.dart';
+import 'models/watch_next_item.dart';
 
-const _kDockOuterPadding = EdgeInsets.only(
-  left: kLauncherSectionHorizontalPadding,
-  right: kLauncherSectionHorizontalPadding,
-  top: 10,
-  bottom: 16,
-);
+/// The tray's edge sits 16 dp outside the content keyline (x = 48), so tiles line up with the
+/// top bar and the hero. The 34 dp below the tray (it ends at y = 506 on a 540 dp tall screen)
+/// belong to the dock, so the first grid section starts below the screen edge.
+const _kDockOuterPadding = EdgeInsets.only(left: 32, right: 32, top: 10, bottom: 34);
 
-/// Space left between the dock's outer padding and the bottom edge of the screen.
-const _kDockBottomMargin = 8.0;
+/// Space between the dock's outer padding and the bottom edge of the screen.
+const _kDockBottomMargin = 0.0;
+
+const _kDockTrayPadding = 16.0;
 
 class FLauncher extends StatefulWidget {
   const FLauncher({super.key});
@@ -70,27 +71,51 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   int _homePressGeneration = 0;
   final GlobalKey _dockKey = GlobalKey();
+  final FocusNode _allAppsFocusNode = FocusNode(debugLabel: "dock_all_apps");
+  int _heroIndex = 0;
+  int _heroDirection = 1;
+  late final LauncherState _launcherState;
+  late final WatchNextService _watchNextService;
   late final _HeroBackdropBaker _heroBackdropBaker = _HeroBackdropBaker();
 
   /// Added to the spacer above the dock so the dock ends at the bottom of the screen.
-  /// The spacer's base height assumes a fixed dock height, which changes with the
-  /// number of favorites and with app names on or off.
-  double _dockSpacerCorrection = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     FLauncherChannel.setHomePressedHandler(_onHomePressed);
+    _launcherState = context.read<LauncherState>();
+    _launcherState.returnToDockHandler = _returnToDock;
+    _watchNextService = context.read<WatchNextService>();
+    _watchNextService.heroSwitchGate = _prepareHeroBackdrop;
   }
 
   @override
   void dispose() {
     FLauncherChannel.setHomePressedHandler(null);
+    if (_launcherState.returnToDockHandler == _returnToDock) {
+      _launcherState.returnToDockHandler = null;
+    }
+    if (_watchNextService.heroSwitchGate == _prepareHeroBackdrop) {
+      _watchNextService.heroSwitchGate = null;
+    }
     WidgetsBinding.instance.removeObserver(this);
+    _allAppsFocusNode.dispose();
     _scrollController.dispose();
     _heroBackdropBaker.dispose();
     super.dispose();
+  }
+
+  /// Bakes the next hero item's backdrop before the hero shows it, so its text and picture change
+  /// together. A poster that is not loaded yet follows on its own once it arrives.
+  Future<void> _prepareHeroBackdrop(WatchNextItem item) async {
+    if (!mounted) return;
+    final settings = context.read<SettingsService>();
+    if (!settings.showWatchNextSection || !settings.watchNextBigPictureMode) return;
+    final bytes = _watchNextService.getCachedPoster(_watchNextService.getPosterUriForItem(item));
+    if (bytes == null) return;
+    await _heroBackdropBaker.prepare(bytes);
   }
 
   @override
@@ -121,6 +146,11 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                 final heroUri = isBigPicture ? watchNextService.getPosterUriForItem(activeItem) : null;
                 final heroBytes = isBigPicture ? watchNextService.getCachedPoster(heroUri) : null;
                 final hasHeroBackdrop = isBigPicture && heroBytes != null;
+                final heroIndex = watchNextService.activeHeroIndex;
+                if (heroIndex != _heroIndex) {
+                  _heroDirection = carouselDirection(_heroIndex, heroIndex, watchNextService.items.length);
+                  _heroIndex = heroIndex;
+                }
                 final screenSize = MediaQuery.sizeOf(context);
                 final dpr = MediaQuery.devicePixelRatioOf(context);
                 _heroBackdropBaker.update(
@@ -135,7 +165,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                       duration: const Duration(milliseconds: 1500),
                       child: hasHeroBackdrop
                           ? const SizedBox.shrink(key: ValueKey('occluded_wallpaper'))
-                          : _wallpaper(context, wallpaperService),
+                          : _scrimmedWallpaper(_wallpaper(context, wallpaperService)),
                     ),
                     // Hero items crossfade once baked simultaneously with dock blur.
                     AnimatedSwitcher(
@@ -147,14 +177,22 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                                 listenable: _heroBackdropBaker,
                                 builder: (context, _) {
                                   final heroImage = _heroBackdropBaker.textures?.hero;
+                                  final Key heroKey = heroImage == null ? const ValueKey('empty_hero') : ObjectKey(heroImage);
+                                  // Slides with the hero text, in the direction the carousel moved.
                                   return AnimatedSwitcher(
                                     duration: _kHeroFadeDuration,
-                                    switchInCurve: Curves.easeOutCubic,
-                                    switchOutCurve: Curves.easeInCubic,
+                                    transitionBuilder: (child, animation) => carouselTransition(
+                                      child: child,
+                                      animation: animation,
+                                      incoming: child.key == heroKey,
+                                      direction: _heroDirection,
+                                      distance: 0.03,
+                                      coverEdges: true,
+                                    ),
                                     child: heroImage == null
-                                        ? const SizedBox.expand(key: ValueKey('empty_hero'))
+                                        ? SizedBox.expand(key: heroKey)
                                         : RawImage(
-                                            key: ObjectKey(heroImage),
+                                            key: heroKey,
                                             image: heroImage,
                                             width: screenSize.width,
                                             height: screenSize.height,
@@ -287,6 +325,8 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
           return true;
         }).toList();
 
+    final hasAppsBelowDock = otherSections.any((section) => section is Category && section.applications.isNotEmpty);
+
     final showWatchNextSection = context.select<SettingsService, bool>((s) => s.showWatchNextSection);
     final watchNextBigPicture = context.select<SettingsService, bool>((s) => s.watchNextBigPictureMode);
     final watchNextVisible = context.select<WatchNextService, bool>((s) => s.hasVisibleSection);
@@ -294,41 +334,25 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
 
     if (favoriteApps.isEmpty && otherSections.isEmpty) return _emptyState(context);
 
-    final watchNextSpace = watchNextBigPicture ? 385 : 410;
+    // Space kept for Watch Next when there is no dock below it.
+    final watchNextSpace = watchNextBigPicture ? 314 : 410;
 
-    if (favoriteApps.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _anchorDockToBottom());
-    }
-
-    return CustomScrollView(
-      controller: _scrollController,
-      slivers: [
-        if (favoriteApps.isNotEmpty || showWatchNextSection) ...[
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: max(
-                0.0,
-                MediaQuery.of(context).size.height -
-                    MediaQuery.of(context).padding.top -
-                    kToolbarHeight -
-                    (reserveWatchNextSpace ? watchNextSpace : 150) +
-                    (favoriteApps.isNotEmpty ? _dockSpacerCorrection : 0),
-              ),
-            ),
-          ),
-          if (showWatchNextSection)
-            SliverToBoxAdapter(
-              child: RepaintBoundary(
-                child: WatchNextRow(
-                  isFirstSection: favoriteApps.isEmpty,
-                  isAboveDock: true,
-                  onItemFocused: _onHomeSectionFocused,
+    // Watch Next and the dock, built here because the dock reads providers during build.
+    final Widget? aboveFold = favoriteApps.isEmpty
+        ? null
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (showWatchNextSection)
+                RepaintBoundary(
+                  child: WatchNextRow(
+                    isFirstSection: false,
+                    isAboveDock: true,
+                    onItemFocused: _onHomeSectionFocused,
+                  ),
                 ),
-              ),
-            ),
-          if (favoriteApps.isNotEmpty)
-            SliverToBoxAdapter(
-              child: KeyedSubtree(
+              KeyedSubtree(
                 key: _dockKey,
                 child: Padding(
                   padding: _kDockOuterPadding,
@@ -338,10 +362,50 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                     favoriteApps,
                     appsService,
                     handleUpNavigationToSettings: !reserveWatchNextSpace,
+                    showAllAppsTile: hasAppsBelowDock,
                   ),
                 ),
               ),
+            ],
+          );
+
+    return CustomScrollView(
+      controller: _scrollController,
+      slivers: [
+        if (aboveFold != null)
+          // At least one screen tall with the dock against its bottom edge, so the dock stays put
+          // while what is above it (the hero arriving, the permission banner) changes height.
+          SliverLayoutBuilder(
+            builder: (_, constraints) => SliverToBoxAdapter(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: max(0.0, constraints.viewportMainAxisExtent - _kDockBottomMargin),
+                ),
+                child: Align(alignment: Alignment.bottomCenter, child: aboveFold),
+              ),
             ),
+          )
+        else if (showWatchNextSection) ...[
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: max(
+                0.0,
+                MediaQuery.of(context).size.height -
+                    MediaQuery.of(context).padding.top -
+                    kToolbarHeight -
+                    (reserveWatchNextSpace ? watchNextSpace : 150),
+              ),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: RepaintBoundary(
+              child: WatchNextRow(
+                isFirstSection: true,
+                isAboveDock: true,
+                onItemFocused: _onHomeSectionFocused,
+              ),
+            ),
+          ),
         ],
         ..._buildSectionSlivers(
           otherSections,
@@ -557,25 +621,6 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     );
   }
 
-  /// Measures where the dock ends and moves it so it sits [_kDockBottomMargin] above
-  /// the bottom edge. Only runs while the page is unscrolled, so the measurement is
-  /// the resting position.
-  void _anchorDockToBottom() {
-    if (!mounted || !_scrollController.hasClients || _scrollController.offset != 0) {
-      return;
-    }
-    final dockBox = _dockKey.currentContext?.findRenderObject() as RenderBox?;
-    if (dockBox == null || !dockBox.hasSize) {
-      return;
-    }
-    final dockBottom = dockBox.localToGlobal(Offset(0, dockBox.size.height)).dy;
-    final gap = MediaQuery.sizeOf(context).height - _kDockBottomMargin - dockBottom;
-    if (gap.abs() < 1) {
-      return;
-    }
-    setState(() => _dockSpacerCorrection += gap);
-  }
-
   double? _dockTopScrollOffset() {
     final dockContext = _dockKey.currentContext;
     final renderObject = dockContext?.findRenderObject();
@@ -633,64 +678,99 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     List<App> apps,
     AppsService appsService, {
     required bool handleUpNavigationToSettings,
+    required bool showAllAppsTile,
   }) {
-    final backdropDisabled = context.select<SettingsService, bool>((s) => s.dockBackdropFilterDisabled);
-    final darkBackground = context.select<SettingsService, bool>((s) => s.dockDarkBackground);
-    final shadowEnabled = context.select<SettingsService, bool>((s) => s.dockShadowEnabled);
-    final isBigPicture = context.select<SettingsService, bool>((s) => s.showWatchNextSection && s.watchNextBigPictureMode);
+    final tileRadius = context.select<SettingsService, double>((s) => s.cardCornerRadius);
+    // Concentric with the tiles: tray radius = tile radius + tray padding.
+    final trayRadius = BorderRadius.circular(tileRadius + _kDockTrayPadding);
 
-    const dockBorderRadius = 24.0;
-    final borderRadius = BorderRadius.circular(dockBorderRadius);
-
-    final content = CustomPaint(
-      foregroundPainter: const DockContourPainter(radius: dockBorderRadius, strokeWidth: 1.0),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        decoration: BoxDecoration(
-          color: darkBackground
-              ? Colors.black.withValues(alpha: 0.35)
-              : (isBigPicture ? Colors.white.withValues(alpha: 0.16) : Colors.white.withValues(alpha: 0.1)),
-          borderRadius: borderRadius,
-        ),
-        child: CategoryCleanRow(
-          category: category,
-          applications: apps,
-          isFirstSection: handleUpNavigationToSettings,
-          scrollAlignment: 1.0,
-          onAppFocused: _onHomeSectionFocused,
+    // Flat, translucent tray: the picture shows through as it is, without a blurred copy.
+    return Container(
+      key: const Key("dock_tray"),
+      padding: const EdgeInsets.all(_kDockTrayPadding),
+      decoration: BoxDecoration(color: const Color.fromRGBO(30, 30, 30, 0.55), borderRadius: trayRadius),
+      // A foreground border adds no padding, so the tiles start exactly on the content keyline.
+      foregroundDecoration: BoxDecoration(
+        borderRadius: trayRadius,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.1),
+          width: 1 / MediaQuery.devicePixelRatioOf(context),
         ),
       ),
-    );
-
-    return Center(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: borderRadius,
-          boxShadow: shadowEnabled
-              ? [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)]
-              : null,
-        ),
-        child: ClipRRect(
-          borderRadius: borderRadius,
-          clipBehavior: Clip.antiAlias,
-          child: backdropDisabled
-              ? content
-              : ListenableBuilder(
-                  listenable: _heroBackdropBaker,
-                  child: content,
-                  builder: (_, child) {
-                    final dockBlur = _heroBackdropBaker.textures?.dockBlur;
-                    return CachedBlurBackdrop(
-                      sigma: 5,
-                      prebakedBlur: dockBlur,
-                      child: child!,
-                    );
-                  },
-                ),
-        ),
+      child: CategoryCleanRow(
+        category: category,
+        applications: apps,
+        isFirstSection: handleUpNavigationToSettings,
+        scrollAlignment: 1.0,
+        onAppFocused: _onHomeSectionFocused,
+        onAllAppsPressed: showAllAppsTile ? _focusFirstGridApp : null,
+        allAppsFocusNode: _allAppsFocusNode,
       ),
     );
   }
+
+  /// "All apps" in the dock: focus the top-left app below the dock, which scrolls the grid up.
+  Future<void> _focusFirstGridApp() async {
+    var target = _firstGridAppNode();
+    if (target == null) {
+      // The grid is built lazily; reveal it first.
+      await _scrollDockToTop();
+      if (!mounted) return;
+      target = _firstGridAppNode();
+    }
+    target?.requestFocus();
+  }
+
+  FocusNode? _firstGridAppNode() {
+    FocusNode? first;
+    Offset? firstOrigin;
+    for (final node in FocusScope.of(context).traversalDescendants) {
+      final nodeContext = node.context;
+      if (nodeContext == null || !node.canRequestFocus) continue;
+      if (nodeContext.findAncestorWidgetOfExactType<AppCard>() == null) continue;
+      if (nodeContext.findAncestorWidgetOfExactType<CategoryCleanRow>() != null) continue;
+      final renderObject = nodeContext.findRenderObject();
+      if (renderObject is! RenderBox || !renderObject.attached) continue;
+      final origin = renderObject.localToGlobal(Offset.zero);
+      if (firstOrigin == null || origin.dy < firstOrigin.dy || (origin.dy == firstOrigin.dy && origin.dx < firstOrigin.dx)) {
+        first = node;
+        firstOrigin = origin;
+      }
+    }
+    return first;
+  }
+
+  /// Back while the app grid has focus: return to the "All apps" tile and the top of the page.
+  bool _returnToDock() {
+    if (!mounted || _allAppsFocusNode.context == null) {
+      return false;
+    }
+    _allAppsFocusNode.requestFocus();
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.minScrollExtent,
+        duration: const Duration(milliseconds: 260),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+    return true;
+  }
+
+  /// The wallpaper with the same top and bottom scrims as the hero backdrop, crossfading as one.
+  Widget _scrimmedWallpaper(Widget wallpaper) => Stack(
+    key: ValueKey(('scrimmed_wallpaper', wallpaper.key)),
+    children: [
+      wallpaper,
+      const Positioned.fill(
+        child: IgnorePointer(
+          child: CustomPaint(
+            key: Key("wallpaper_scrim"),
+            painter: _CinematicScrimPainter(leftScrim: false),
+          ),
+        ),
+      ),
+    ],
+  );
 
   Widget _wallpaper(BuildContext context, WallpaperService wallpaperService) {
     final screenSize = MediaQuery.sizeOf(context);
@@ -809,40 +889,47 @@ class _CachedGradientBackgroundState extends State<_CachedGradientBackground> {
   }
 }
 
-const _kHeroFadeDuration = Duration(milliseconds: 600);
+/// Same 400 ms as the hero text, so text and backdrop change together.
+const _kHeroFadeDuration = kHeroCarouselDuration;
 
 class _HeroBackdropTextures {
   final ui.Image hero;
-  final ui.Image dockBlur;
   final ui.Image gridBlur;
   final Uint8List bytes;
+  final Size size;
+  final double dpr;
   bool _disposed = false;
 
   _HeroBackdropTextures({
     required this.hero,
-    required this.dockBlur,
     required this.gridBlur,
     required this.bytes,
+    required this.size,
+    required this.dpr,
   });
+
+  bool matches(Uint8List bytes, Size size, double dpr) =>
+      identical(bytes, this.bytes) && size == this.size && dpr == this.dpr;
 
   void dispose() {
     if (_disposed) return;
     _disposed = true;
     hero.dispose();
-    dockBlur.dispose();
     gridBlur.dispose();
   }
 }
 
 class _HeroBackdropBaker extends ChangeNotifier {
   _HeroBackdropTextures? _current;
+  /// Baked ahead by [prepare] for the hero item about to be shown; [update] shows it at once.
+  _HeroBackdropTextures? _prepared;
+  ({Uint8List bytes, Future<void> done})? _preparing;
   final List<_HeroBackdropTextures> _disposedTextures = [];
   Uint8List? _requestedBytes;
   Size _requestedSize = Size.zero;
   double _requestedDpr = 1.0;
-  Size _currentSize = Size.zero;
-  double _currentDpr = 1.0;
   bool _baking = false;
+  bool _isDisposed = false;
 
   _HeroBackdropTextures? get textures => _current;
 
@@ -867,12 +954,63 @@ class _HeroBackdropBaker extends ChangeNotifier {
       return;
     }
 
+    final prepared = _prepared;
+    if (prepared != null && prepared.matches(bytes, size, dpr)) {
+      _prepared = null;
+      _setCurrent(prepared);
+      // Runs during build: the hero backdrop is rebuilt in this frame anyway, so its transition
+      // starts with the hero text. The grid blur follows on the next frame.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_isDisposed) notifyListeners();
+      });
+      return;
+    }
+
     if (!_baking) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_baking && _requestedBytes != null) {
           _bake();
         }
       });
+    }
+  }
+
+  /// Bakes [bytes] at the current screen size without showing them, so the next [update] with the
+  /// same bytes can swap them in within the same frame.
+  Future<void> prepare(Uint8List bytes) {
+    final size = _requestedSize;
+    final dpr = _requestedDpr;
+    if (_isDisposed || size.width <= 0 || size.height <= 0) return Future.value();
+    if ((_current?.matches(bytes, size, dpr) ?? false) || (_prepared?.matches(bytes, size, dpr) ?? false)) {
+      return Future.value();
+    }
+    final pending = _preparing;
+    if (pending != null && identical(pending.bytes, bytes)) return pending.done;
+
+    bool isStale() => _isDisposed || !identical(_preparing?.bytes, bytes);
+    Future<void> run() async {
+      final textures = await _bakeTextures(bytes, size, dpr, isStale: isStale);
+      if (textures == null) return;
+      if (isStale()) {
+        textures.dispose();
+        return;
+      }
+      _preparing = null;
+      final old = _prepared;
+      _prepared = textures;
+      if (old != null) _scheduleDispose(old);
+    }
+
+    final done = run();
+    _preparing = (bytes: bytes, done: done);
+    return done;
+  }
+
+  void _setCurrent(_HeroBackdropTextures textures) {
+    final old = _current;
+    _current = textures;
+    if (old != null) {
+      _scheduleDispose(old);
     }
   }
 
@@ -888,105 +1026,16 @@ class _HeroBackdropBaker extends ChangeNotifier {
     if (_baking) return;
     _baking = true;
     try {
-      while (_requestedBytes != null &&
-          (_current == null ||
-              !identical(_requestedBytes, _current!.bytes) ||
-              _requestedSize != _currentSize ||
-              _requestedDpr != _currentDpr)) {
+      while (_requestedBytes != null && !(_current?.matches(_requestedBytes!, _requestedSize, _requestedDpr) ?? false)) {
         final bytes = _requestedBytes!;
-        final size = _requestedSize;
-        final dpr = _requestedDpr;
-
-        final pxSize = Size((size.width * dpr).roundToDouble(), (size.height * dpr).roundToDouble());
-        final codec = await ui.instantiateImageCodecWithSize(
-          await ui.ImmutableBuffer.fromUint8List(bytes),
-          getTargetSize: (w, h) {
-            final scale = min(1.0, max(pxSize.width / w, pxSize.height / h));
-            return ui.TargetImageSize(width: (w * scale).round(), height: (h * scale).round());
-          },
+        final textures = await _bakeTextures(
+          bytes,
+          _requestedSize,
+          _requestedDpr,
+          isStale: () => !identical(bytes, _requestedBytes),
         );
-        final source = (await codec.getNextFrame()).image;
-        codec.dispose();
-
-        if (!identical(bytes, _requestedBytes)) {
-          source.dispose();
-          continue;
-        }
-
-        // 1. Full-screen hero background with cinematic scrim
-        final heroRecorder = ui.PictureRecorder();
-        final heroCanvas = Canvas(heroRecorder);
-        paintImage(canvas: heroCanvas, rect: Offset.zero & pxSize, image: source, fit: BoxFit.cover);
-        const _CinematicScrimPainter().paint(heroCanvas, pxSize);
-        final heroPicture = heroRecorder.endRecording();
-        final heroImage = heroPicture.toImageSync(pxSize.width.toInt(), pxSize.height.toInt());
-        heroPicture.dispose();
-
-        // 2. Dock blur snapshot (960x540, sigma 5)
-        final double targetWidth = min(size.width * dpr, 960.0);
-        final double targetHeight = min(size.height * dpr, 540.0);
-        final pxWidth = targetWidth.round();
-        final pxHeight = targetHeight.round();
-        final blurRect = Rect.fromLTWH(0, 0, pxWidth.toDouble(), pxHeight.toDouble());
-        final double scaleFactor = pxWidth / size.width;
-
-        final dockRecorder = ui.PictureRecorder();
-        final dockCanvas = Canvas(dockRecorder);
-        final dockPaint = Paint()
-          ..imageFilter = ui.ImageFilter.blur(
-            sigmaX: 5.0 * scaleFactor,
-            sigmaY: 5.0 * scaleFactor,
-            tileMode: TileMode.clamp,
-          );
-        dockCanvas.saveLayer(blurRect, dockPaint);
-        paintImage(canvas: dockCanvas, rect: blurRect, image: source, fit: BoxFit.cover, filterQuality: FilterQuality.low);
-        // Blur the scrimmed hero (what is actually on screen), otherwise the blur looks much brighter.
-        const _CinematicScrimPainter().paint(dockCanvas, blurRect.size);
-        dockCanvas.restore();
-        final dockPicture = dockRecorder.endRecording();
-        final dockImage = dockPicture.toImageSync(pxWidth, pxHeight);
-        dockPicture.dispose();
-
-        // 3. App grid blur snapshot (960x540, sigma 10)
-        final gridRecorder = ui.PictureRecorder();
-        final gridCanvas = Canvas(gridRecorder);
-        final gridPaint = Paint()
-          ..imageFilter = ui.ImageFilter.blur(
-            sigmaX: 10.0 * scaleFactor,
-            sigmaY: 10.0 * scaleFactor,
-            tileMode: TileMode.clamp,
-          );
-        gridCanvas.saveLayer(blurRect, gridPaint);
-        paintImage(canvas: gridCanvas, rect: blurRect, image: source, fit: BoxFit.cover, filterQuality: FilterQuality.low);
-        const _CinematicScrimPainter().paint(gridCanvas, blurRect.size);
-        gridCanvas.restore();
-        final gridPicture = gridRecorder.endRecording();
-        final gridImage = gridPicture.toImageSync(pxWidth, pxHeight);
-        gridPicture.dispose();
-
-        source.dispose();
-
-        if (!identical(bytes, _requestedBytes)) {
-          heroImage.dispose();
-          dockImage.dispose();
-          gridImage.dispose();
-          continue;
-        }
-
-        final old = _current;
-        _current = _HeroBackdropTextures(
-          hero: heroImage,
-          dockBlur: dockImage,
-          gridBlur: gridImage,
-          bytes: bytes,
-        );
-        _currentSize = size;
-        _currentDpr = dpr;
-
-        if (old != null) {
-          _scheduleDispose(old);
-        }
-
+        if (textures == null) continue;
+        _setCurrent(textures);
         notifyListeners();
       }
     } finally {
@@ -994,55 +1043,149 @@ class _HeroBackdropBaker extends ChangeNotifier {
     }
   }
 
+  /// The full-screen hero picture and the grid blur for [bytes], or null when [isStale] turns true
+  /// on the way.
+  Future<_HeroBackdropTextures?> _bakeTextures(
+    Uint8List bytes,
+    Size size,
+    double dpr, {
+    required bool Function() isStale,
+  }) async {
+    final pxSize = Size((size.width * dpr).roundToDouble(), (size.height * dpr).roundToDouble());
+    final codec = await ui.instantiateImageCodecWithSize(
+      await ui.ImmutableBuffer.fromUint8List(bytes),
+      getTargetSize: (w, h) {
+        final scale = min(1.0, max(pxSize.width / w, pxSize.height / h));
+        return ui.TargetImageSize(width: (w * scale).round(), height: (h * scale).round());
+      },
+    );
+    final source = (await codec.getNextFrame()).image;
+    codec.dispose();
+
+    if (isStale()) {
+      source.dispose();
+      return null;
+    }
+
+    // 1. Full-screen hero background with cinematic scrim
+    final heroRecorder = ui.PictureRecorder();
+    final heroCanvas = Canvas(heroRecorder);
+    paintImage(
+      canvas: heroCanvas,
+      rect: Offset.zero & pxSize,
+      image: source,
+      fit: BoxFit.cover,
+      alignment: Alignment.topCenter,
+    );
+    const _CinematicScrimPainter().paint(heroCanvas, pxSize);
+    final heroPicture = heroRecorder.endRecording();
+    final heroImage = heroPicture.toImageSync(pxSize.width.toInt(), pxSize.height.toInt());
+    heroPicture.dispose();
+
+    // 2. App grid blur snapshot (960x540, sigma 10)
+    final double targetWidth = min(size.width * dpr, 960.0);
+    final double targetHeight = min(size.height * dpr, 540.0);
+    final pxWidth = targetWidth.round();
+    final pxHeight = targetHeight.round();
+    final blurRect = Rect.fromLTWH(0, 0, pxWidth.toDouble(), pxHeight.toDouble());
+    final double scaleFactor = pxWidth / size.width;
+
+    final gridRecorder = ui.PictureRecorder();
+    final gridCanvas = Canvas(gridRecorder);
+    final gridPaint = Paint()
+      ..imageFilter = ui.ImageFilter.blur(
+        sigmaX: 10.0 * scaleFactor,
+        sigmaY: 10.0 * scaleFactor,
+        tileMode: TileMode.clamp,
+      );
+    gridCanvas.saveLayer(blurRect, gridPaint);
+    paintImage(
+      canvas: gridCanvas,
+      rect: blurRect,
+      image: source,
+      fit: BoxFit.cover,
+      alignment: Alignment.topCenter,
+      filterQuality: FilterQuality.low,
+    );
+    // Blur the scrimmed hero (what is actually on screen), otherwise the blur looks much brighter.
+    const _CinematicScrimPainter().paint(gridCanvas, blurRect.size);
+    gridCanvas.restore();
+    final gridPicture = gridRecorder.endRecording();
+    final gridImage = gridPicture.toImageSync(pxWidth, pxHeight);
+    gridPicture.dispose();
+
+    source.dispose();
+
+    if (isStale()) {
+      heroImage.dispose();
+      gridImage.dispose();
+      return null;
+    }
+    return _HeroBackdropTextures(hero: heroImage, gridBlur: gridImage, bytes: bytes, size: size, dpr: dpr);
+  }
+
   @override
   void dispose() {
+    _isDisposed = true;
     for (final t in _disposedTextures) {
       t.dispose();
     }
     _disposedTextures.clear();
     _current?.dispose();
     _current = null;
+    _prepared?.dispose();
+    _prepared = null;
     super.dispose();
   }
 }
 
+/// Scrims over the home background. The left one only goes behind the hero text; top and bottom
+/// keep the top bar and the dock readable on any picture.
 class _CinematicScrimPainter extends CustomPainter {
-  const _CinematicScrimPainter();
+  final bool leftScrim;
+
+  const _CinematicScrimPainter({this.leftScrim = true});
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    // Top-to-bottom cinematic scrim
-    final vPaint = Paint()
-      ..shader = ui.Gradient.linear(
-        Offset.zero,
-        Offset(0, size.height),
-        const [
-          Color(0x59000000), // 0.35
-          Colors.transparent,
-          Color(0x80000000), // 0.50
-          Color(0xE0000000), // 0.88
-        ],
-        const [0.0, 0.25, 0.65, 1.0],
+    if (leftScrim) {
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..shader = ui.Gradient.linear(
+            Offset(0, size.height / 2),
+            Offset(size.width, size.height / 2),
+            const [Color(0xD9000000), Color(0xD9000000), Colors.transparent], // 0.85, 0.85, 0
+            const [0.0, 0.25, 0.6],
+          ),
       );
-    canvas.drawRect(rect, vPaint);
-
-    // Left-to-right cinematic scrim
-    final hPaint = Paint()
-      ..shader = ui.Gradient.linear(
-        Offset(0, size.height / 2),
-        Offset(size.width, size.height / 2),
-        const [
-          Color(0xA6000000), // 0.65
-          Color(0x40000000), // 0.25
-          Colors.transparent,
-        ],
-        const [0.0, 0.35, 0.7],
-      );
-    canvas.drawRect(rect, hPaint);
+    }
+    // Bottom: 50% black at the bottom edge, gone at 35% of the height measured from the bottom.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          Offset(0, size.height),
+          Offset.zero,
+          const [Color(0x80000000), Colors.transparent],
+          const [0.0, 0.35],
+        ),
+    );
+    // Top: 45% black at the top edge, gone at 15% of the height.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = ui.Gradient.linear(
+          Offset.zero,
+          Offset(0, size.height),
+          const [Color(0x73000000), Colors.transparent],
+          const [0.0, 0.15],
+        ),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _CinematicScrimPainter oldDelegate) => oldDelegate.leftScrim != leftScrim;
 }
 

@@ -111,7 +111,8 @@ class WatchNextRow extends StatelessWidget {
                 handleUpNavigationToSettings: isAboveDock,
                 onItemFocused: onItemFocused,
               ),
-            SizedBox(height: isBigPicture ? 16 : 12),
+            // Big picture: 17 + the dock's 10 dp top padding leave 27 dp between Watch and the tray.
+            SizedBox(height: isBigPicture ? 17 : 12),
           ],
         );
       },

@@ -18,15 +18,38 @@
 
 import 'dart:math';
 
+import 'package:flauncher/actions.dart';
+import 'package:flauncher/l10n/app_localizations.dart';
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/widgets/app_card.dart';
 import 'package:flauncher/widgets/category_container_common.dart';
+import 'package:flauncher/widgets/dock_focus_ring.dart';
+import 'package:flauncher/widgets/focus_keyboard_listener.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/app.dart';
 import '../models/category.dart';
+
+/// Smallest space between two dock tiles, so the focus ring of a scaled tile stays clear of its
+/// neighbours.
+const kDockMinTileGap = 12.0;
+
+/// Size of each of [tileCount] app tiles in [contentWidth]: [kDockTileMaxWidth] wide while they
+/// fit, otherwise all shrink evenly, keeping their shape. With [withSquareTile], a square tile as
+/// tall as the app tiles shares the width (the "All apps" tile).
+Size dockTileSize(double contentWidth, int tileCount, {bool withSquareTile = false}) {
+  if (tileCount <= 0) {
+    return const Size(kDockTileMaxWidth, kDockTileHeight);
+  }
+  const squareShare = kDockTileHeight / kDockTileMaxWidth;
+  final gaps = withSquareTile ? tileCount : tileCount - 1;
+  final fitWidth = (contentWidth - gaps * kDockMinTileGap) / (tileCount + (withSquareTile ? squareShare : 0));
+  final width = max(0.0, min(kDockTileMaxWidth, fitWidth));
+  return Size(width, width * squareShare);
+}
 
 class CategoryCleanRow extends StatelessWidget
 {
@@ -37,6 +60,10 @@ class CategoryCleanRow extends StatelessWidget
   final double scrollAlignment;
   final VoidCallback? onAppFocused;
 
+  /// Shows the "All apps" tile at the end of the row when set.
+  final VoidCallback? onAllAppsPressed;
+  final FocusNode? allAppsFocusNode;
+
   CategoryCleanRow({
     Key? key,
     required this.category,
@@ -44,11 +71,12 @@ class CategoryCleanRow extends StatelessWidget
     this.isFirstSection = false,
     this.scrollAlignment = 0.5,
     this.onAppFocused,
+    this.onAllAppsPressed,
+    this.allAppsFocusNode,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final showAppNames = context.select<SettingsService, bool>((s) => s.showAppNamesBelowIcons);
     Widget categoryContent;
     if (applications.isEmpty) {
       categoryContent = categoryContainerEmptyState(context);
@@ -56,39 +84,45 @@ class CategoryCleanRow extends StatelessWidget
     else {
       categoryContent = LayoutBuilder(
         builder: (context, constraints) {
-          // Grow past the default slot count so no app in the row is dropped.
-          final slotCount = max(Category.ColumnsCount, applications.length);
-          final rowHeight = appCardRowExtentFromContentWidth(constraints.maxWidth, columnCount: slotCount)
-              + (showAppNames ? kAppNameLabelHeight : 0);
+          final tileSize = dockTileSize(
+            constraints.maxWidth,
+            applications.length,
+            withSquareTile: onAllAppsPressed != null,
+          );
           return SizedBox(
-            height: rowHeight,
+            height: tileSize.height,
             child: Row(
-              children: List.generate(slotCount, (index) {
-                if (index < applications.length) {
-                  return Expanded(
-                    child: Padding(
-                      key: ValueKey(applications[index].packageName),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: kAppCardHorizontalPadding,
-                        vertical: kAppCardVerticalPadding,
-                      ),
-                      child: AppCard(
-                        category: category,
-                        application: applications[index],
-                        autofocus: index == 0,
-                        handleUpNavigationToSettings: isFirstSection,
-                        scrollAlignment: scrollAlignment,
-                        enforceAspectRatio: false,
-                        onFocused: onAppFocused,
-                        onMove: (direction) => _onMove(context, direction, index),
-                        onMoveEnd: () => _onMoveEnd(context),
-                      ),
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                for (final (index, application) in applications.indexed)
+                  SizedBox(
+                    key: ValueKey(application.packageName),
+                    width: tileSize.width,
+                    height: tileSize.height,
+                    child: AppCard(
+                      category: category,
+                      application: application,
+                      autofocus: index == 0,
+                      handleUpNavigationToSettings: isFirstSection,
+                      scrollAlignment: scrollAlignment,
+                      enforceAspectRatio: false,
+                      dockTile: true,
+                      onFocused: onAppFocused,
+                      onMove: (direction) => _onMove(context, direction, index),
+                      onMoveEnd: () => _onMoveEnd(context),
                     ),
-                  );
-                } else {
-                  return const Expanded(child: SizedBox.shrink());
-                }
-              }),
+                  ),
+                if (onAllAppsPressed != null)
+                  SizedBox.square(
+                    dimension: tileSize.height,
+                    child: DockAllAppsTile(
+                      focusNode: allAppsFocusNode,
+                      onPressed: onAllAppsPressed!,
+                      onFocused: onAppFocused,
+                      handleUpNavigationToSettings: isFirstSection,
+                    ),
+                  ),
+              ],
             ),
           );
         },
@@ -130,5 +164,101 @@ class CategoryCleanRow extends StatelessWidget
   void _onMoveEnd(BuildContext context) {
     final appsService = context.read<AppsService>();
     appsService.saveApplicationOrderInCategory(category);
+  }
+}
+
+/// Last tile of the dock: takes focus to the full app list below the dock.
+class DockAllAppsTile extends StatefulWidget {
+  final FocusNode? focusNode;
+  final VoidCallback onPressed;
+  final VoidCallback? onFocused;
+  final bool handleUpNavigationToSettings;
+
+  const DockAllAppsTile({
+    super.key,
+    this.focusNode,
+    required this.onPressed,
+    this.onFocused,
+    this.handleUpNavigationToSettings = false,
+  });
+
+  @override
+  State<DockAllAppsTile> createState() => _DockAllAppsTileState();
+}
+
+class _DockAllAppsTileState extends State<DockAllAppsTile> {
+  bool _focused = false;
+  bool _selectDown = false;
+
+  // Fires on key up, like the app tiles, so the release does not land on the app focused next.
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    final key = event.logicalKey;
+    if (longPressableKeys.contains(key)) {
+      if (event is KeyDownEvent) {
+        _selectDown = true;
+      } else if (event is KeyUpEvent && _selectDown) {
+        _selectDown = false;
+        widget.onPressed();
+      }
+      return KeyEventResult.handled;
+    }
+    if (event is KeyDownEvent && key == LogicalKeyboardKey.arrowUp && widget.handleUpNavigationToSettings) {
+      Actions.invoke(context, const MoveFocusToSettingsIntent());
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final (radius, showFocusBorders) = context.select<SettingsService, (double, bool)>(
+      (s) => (s.cardCornerRadius, s.showFocusBorders),
+    );
+    final highlighted = _focused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
+    return Semantics(
+      button: true,
+      label: AppLocalizations.of(context)!.dockAllApps,
+      child: Focus(
+        focusNode: widget.focusNode,
+        onKeyEvent: _onKey,
+        onFocusChange: (focused) {
+          setState(() {
+            _focused = focused;
+            _selectDown = false;
+          });
+          if (focused) {
+            widget.onFocused?.call();
+          }
+        },
+        child: GestureDetector(
+          onTap: widget.onPressed,
+          child: AnimatedScale(
+            scale: highlighted ? kDockTileFocusedScale : 1.0,
+            duration: kDockFocusDuration,
+            curve: Curves.easeOut,
+            child: Stack(
+              fit: StackFit.expand,
+              clipBehavior: Clip.none,
+              children: [
+                DockTileShadow(tileRadius: radius, visible: highlighted),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0x1FFFFFFF),
+                    borderRadius: BorderRadius.circular(radius),
+                  ),
+                  child: LayoutBuilder(
+                    // The 3x3 glyph is 34 of the tile's 84 px.
+                    builder: (context, constraints) =>
+                        Icon(Icons.apps, size: constraints.maxHeight * 34 / 84, color: Colors.white),
+                  ),
+                ),
+                DockTileInnerBorder(tileRadius: radius),
+                if (showFocusBorders) DockFocusRing(tileRadius: radius, visible: highlighted),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

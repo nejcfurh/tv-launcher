@@ -26,6 +26,7 @@ import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/widgets/app_card_contour_painter.dart';
 import 'package:flauncher/widgets/application_info_panel.dart';
+import 'package:flauncher/widgets/dock_focus_ring.dart';
 import 'package:flauncher/widgets/focus_keyboard_listener.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -42,6 +43,9 @@ const kAppCardHorizontalPadding = 12.0;
 const kAppCardVerticalPadding = 9.0;
 const kLauncherSectionHorizontalPadding = 24.0;
 const kAppNameLabelHeight = 24.0;
+
+/// How long the loading placeholder takes to fade off a tile once its picture is ready.
+const kAppImageFadeDuration = Duration(milliseconds: 150);
 
 /// Row extent for a grid/dock line given the content width between section paddings.
 double appCardRowExtentFromContentWidth(double contentWidth, {int columnCount = Category.ColumnsCount}) {
@@ -68,6 +72,10 @@ class AppCard extends StatefulWidget {
   final bool ensureVisibleOnFocus;
   final bool onlyScrollWhenNearBottom;
 
+  /// Dock look: no app names, a white ring outside the focused tile instead of the accent contour,
+  /// and no dimming of unfocused tiles.
+  final bool dockTile;
+
   const AppCard({
     super.key,
     required this.application,
@@ -81,6 +89,7 @@ class AppCard extends StatefulWidget {
     this.onFocused,
     this.ensureVisibleOnFocus = true,
     this.onlyScrollWhenNearBottom = false,
+    this.dockTile = false,
   });
 
   @override
@@ -202,6 +211,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
     }
     final appImageWidget = _appImage(displayName);
     final bool shouldHighlight = _shouldHighlight();
+    final bool dock = widget.dockTile;
 
     return FocusKeyboardListener(
       onPressed: _onPressed,
@@ -220,17 +230,19 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                 child: _wrapAspectRatio(
                   RepaintBoundary(
                     child: AnimatedScale(
-                      scale: !_moving && shouldHighlight ? _focusedScale : 1.0,
-                      duration: _focusAnimationDuration,
+                      scale: !_moving && shouldHighlight ? (dock ? kDockTileFocusedScale : _focusedScale) : 1.0,
+                      duration: dock ? kDockFocusDuration : _focusAnimationDuration,
                       alignment: Alignment.center,
-                      curve: Curves.easeOutCubic,
+                      curve: dock ? Curves.easeOut : Curves.easeOutCubic,
                       child: Stack(
                         fit: StackFit.expand,
+                        clipBehavior: Clip.none,
                         children: [
+                          if (dock) DockTileShadow(tileRadius: cornerRadius, visible: shouldHighlight && !_moving),
                           Material(
                             borderRadius: BorderRadius.circular(cornerRadius),
                             clipBehavior: Clip.antiAlias,
-                            elevation: shouldHighlight ? 7 : 4,
+                            elevation: dock ? 0 : (shouldHighlight ? 7 : 4),
                             shadowColor: Colors.black,
                             child: Stack(
                               fit: StackFit.expand,
@@ -246,19 +258,25 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                                     _handleFocusChange(context, focused);
                                   },
                                 ),
+                                _loadingCover(),
                                 if (_moving) ..._arrows(),
-                                IgnorePointer(
-                                  child: AnimatedOpacity(
-                                    duration: _focusAnimationDuration,
-                                    curve: Curves.easeInOut,
-                                    opacity: shouldHighlight ? 0.0 : 1.0,
-                                    child: const ColoredBox(color: Color(0x1A000000)),
+                                if (dock)
+                                  DockTileInnerBorder(tileRadius: cornerRadius)
+                                else
+                                  IgnorePointer(
+                                    child: AnimatedOpacity(
+                                      duration: _focusAnimationDuration,
+                                      curve: Curves.easeInOut,
+                                      opacity: shouldHighlight ? 0.0 : 1.0,
+                                      child: const ColoredBox(color: Color(0x1A000000)),
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
-                          if ((shouldHighlight && showFocusBorders) || _moving)
+                          if (dock && showFocusBorders)
+                            DockFocusRing(tileRadius: cornerRadius, visible: shouldHighlight && !_moving),
+                          if ((!dock && shouldHighlight && showFocusBorders) || _moving)
                             if (animationEnabled && !_moving)
                               IgnorePointer(
                                 child: RepaintBoundary(
@@ -294,7 +312,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                 ),
               ),
               // Hidden labels keep their space so rows don't jump when focus moves.
-              if (showAppNames)
+              if (showAppNames && !dock)
                 AnimatedOpacity(
                   opacity: !appNamesOnFocusOnly || shouldHighlight ? 1.0 : 0.0,
                   duration: _focusAnimationDuration,
@@ -318,9 +336,15 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
         type = AppImageType.Icon;
         bytes = await service.getAppIcon(widget.application.packageName);
       }
+      final image = ResizeImage(MemoryImage(bytes), width: 480);
+      // Decoded before it is shown, so the tile never sits empty between the placeholder and it. A
+      // decode that hangs only delays the picture; the placeholder still goes.
+      if (mounted) {
+        await precacheImage(image, context).timeout(const Duration(seconds: 2), onTimeout: () {});
+      }
       if (mounted) {
         setState(() {
-          _loadedImage = (type, ResizeImage(MemoryImage(bytes), width: 480));
+          _loadedImage = (type, image);
         });
       }
     } catch (_) {
@@ -378,23 +402,41 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
         ),
       );
     } else {
-      return Padding(
-        padding: EdgeInsets.all(8),
-        child: Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-                SizedBox(width: 8),
-                Text(AppLocalizations.of(context)!.loading),
-              ],
-            ),
-          ),
-        ),
-      );
+      return const SizedBox.expand();
     }
+  }
+
+  /// Covers the tile while its picture loads, then fades out over it and leaves the tree.
+  Widget _loadingCover() {
+    final loading = _loadedImage == null && !_imageLoadError;
+    return IgnorePointer(
+      child: AnimatedSwitcher(
+        duration: kAppImageFadeDuration,
+        switchOutCurve: Curves.easeOut,
+        child: !loading
+            ? const SizedBox.shrink()
+            : ColoredBox(
+                key: const Key('app_card_loading_cover'),
+                color: Theme.of(context).canvasColor,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Center(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                          const SizedBox(width: 8),
+                          Text(AppLocalizations.of(context)!.loading),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+      ),
+    );
   }
 
   void _focusHighlightModeChanged(FocusHighlightMode mode) {
@@ -446,7 +488,8 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
   }
 
   void _updateHighlightAnimation() {
-    _setHighlightAnimation(_shouldHighlight() && _animationEnabled);
+    // The dock ring does not pulse, so a dock tile would only tick the controller for nothing.
+    _setHighlightAnimation(_shouldHighlight() && _animationEnabled && !widget.dockTile);
   }
 
   void _setHighlightAnimation(bool shouldAnimate) {

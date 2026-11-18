@@ -21,20 +21,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/launcher_state.dart';
-import '../providers/settings_service.dart';
 
-/// A focusable and hoverable capsule control for the top bar (Settings, Network, etc.),
-/// ported from the native Arc TV design (`LauncherAppBar.kt` FocusRing).
+/// A focusable and hoverable control for the top bar (Settings, app shortcuts).
 ///
-/// Design attributes matching native Arc TV:
-/// - Capsule/stadium shape (`RoundedCornerShape(percent = 50)`).
-/// - Scale animation: 1.0 (rest) -> 1.08 (hover/focus) -> 0.92 (pressed) over 150ms.
-/// - Translucent background: Transparent -> White @ 0.16 (hover) -> White @ 0.22 (focus) -> White @ 0.28 (pressed).
-/// - Specular hairline gradient contour:
-///   - Focused (1.0dp): White @ 0.65 -> Accent @ 0.50 -> White @ 0.35.
-///   - Hovered (0.75dp): White @ 0.35 -> White @ 0.15.
-///   - Pressed (0.75dp): White @ 0.45 -> White @ 0.25.
-/// - Performance: pure vector drawing without offscreen blur filters or layers.
+/// Focus shows a 32 dp circle of 20% white behind an 18 dp glyph (with the default padding) and
+/// scales the control to 1.1. There is no outline: the fill alone marks focus.
 class AppBarFocusRing extends StatefulWidget {
   final Widget child;
   final VoidCallback onPressed;
@@ -47,7 +38,7 @@ class AppBarFocusRing extends StatefulWidget {
     required this.child,
     required this.onPressed,
     this.focusNode,
-    this.padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+    this.padding = const EdgeInsets.all(7),
     this.semanticLabel,
   });
 
@@ -62,11 +53,8 @@ class _AppBarFocusRingState extends State<AppBarFocusRing> {
 
   @override
   Widget build(BuildContext context) {
-    final accentColorHex = context.select<SettingsService, String>((s) => s.accentColorHex);
-    final accentColor = Color(int.parse('FF$accentColorHex', radix: 16));
-
     final isHighlighted = _isFocused || _isHovered;
-    final targetScale = _isPressed ? 0.92 : (isHighlighted ? 1.08 : 1.0);
+    final targetScale = _isPressed ? 0.92 : (isHighlighted ? 1.1 : 1.0);
     final targetProgress = isHighlighted || _isPressed ? 1.0 : 0.0;
 
     return Semantics(
@@ -107,7 +95,7 @@ class _AppBarFocusRingState extends State<AppBarFocusRing> {
               hoverColor: Colors.transparent,
               splashColor: Colors.transparent,
               highlightColor: Colors.transparent,
-              customBorder: const StadiumBorder(),
+              customBorder: const CircleBorder(),
               child: TweenAnimationBuilder<double>(
                 tween: Tween<double>(end: targetProgress),
                 duration: const Duration(milliseconds: 150),
@@ -115,7 +103,6 @@ class _AppBarFocusRingState extends State<AppBarFocusRing> {
                 builder: (context, progress, child) {
                   return CustomPaint(
                     painter: AppBarFocusRingPainter(
-                      accentColor: accentColor,
                       isFocused: _isFocused,
                       isHovered: _isHovered,
                       isPressed: _isPressed,
@@ -137,16 +124,14 @@ class _AppBarFocusRingState extends State<AppBarFocusRing> {
   }
 }
 
-/// Paints the capsule background tint and specular hairline gradient contour.
+/// Paints the translucent white fill behind a focused, hovered or pressed top bar control.
 class AppBarFocusRingPainter extends CustomPainter {
-  final Color accentColor;
   final bool isFocused;
   final bool isHovered;
   final bool isPressed;
   final double progress;
 
   const AppBarFocusRingPainter({
-    required this.accentColor,
     required this.isFocused,
     required this.isHovered,
     required this.isPressed,
@@ -157,81 +142,26 @@ class AppBarFocusRingPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty || progress <= 0.0) return;
 
-    final double strokeWidth = isFocused ? 1.0 : 0.75;
-    final double halfStroke = strokeWidth / 2.0;
-    final double radius = min(size.width, size.height) / 2.0;
-
-    final rect = Rect.fromLTWH(
-      halfStroke,
-      halfStroke,
-      size.width - strokeWidth,
-      size.height - strokeWidth,
-    );
-    final rrect = RRect.fromRectAndRadius(
-      rect,
-      Radius.circular((radius - halfStroke).clamp(0.0, double.infinity)),
-    );
-
-    // 1. Translucent capsule fill
-    final double baseBgAlpha;
+    final double alpha;
     if (isPressed) {
-      baseBgAlpha = 0.28;
+      alpha = 0.28;
     } else if (isFocused) {
-      baseBgAlpha = 0.22;
+      alpha = 0.20;
     } else {
-      baseBgAlpha = 0.16;
+      alpha = 0.16;
     }
 
-    final bgPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = Colors.white.withValues(alpha: (baseBgAlpha * progress).clamp(0.0, 1.0));
-    canvas.drawRRect(rrect, bgPaint);
-
-    // 2. Specular hairline gradient contour
-    final Gradient borderGradient;
-    if (isFocused) {
-      borderGradient = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        stops: const [0.0, 0.5, 1.0],
-        colors: [
-          Colors.white.withValues(alpha: (0.65 * progress).clamp(0.0, 1.0)),
-          accentColor.withValues(alpha: (0.50 * progress).clamp(0.0, 1.0)),
-          Colors.white.withValues(alpha: (0.35 * progress).clamp(0.0, 1.0)),
-        ],
-      );
-    } else if (isPressed) {
-      borderGradient = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Colors.white.withValues(alpha: (0.45 * progress).clamp(0.0, 1.0)),
-          Colors.white.withValues(alpha: (0.25 * progress).clamp(0.0, 1.0)),
-        ],
-      );
-    } else {
-      // Hovered
-      borderGradient = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Colors.white.withValues(alpha: (0.35 * progress).clamp(0.0, 1.0)),
-          Colors.white.withValues(alpha: (0.15 * progress).clamp(0.0, 1.0)),
-        ],
-      );
-    }
-
-    final borderPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..shader = borderGradient.createShader(Offset.zero & size);
-
-    canvas.drawRRect(rrect, borderPaint);
+    final rrect = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(min(size.width, size.height) / 2));
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..style = PaintingStyle.fill
+        ..color = Colors.white.withValues(alpha: (alpha * progress).clamp(0.0, 1.0)),
+    );
   }
 
   @override
   bool shouldRepaint(covariant AppBarFocusRingPainter oldDelegate) =>
-      oldDelegate.accentColor != accentColor ||
       oldDelegate.isFocused != isFocused ||
       oldDelegate.isHovered != isHovered ||
       oldDelegate.isPressed != isPressed ||

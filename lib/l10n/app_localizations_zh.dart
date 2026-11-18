@@ -390,6 +390,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get watchNextOn => '继续观看 ·';
 
   @override
+  String watchNextSeason(String season) {
+    return '第 $season 季';
+  }
+
+  @override
+  String watchNextEpisode(String episode) {
+    return '第 $episode 集';
+  }
+
+  @override
+  String watchNextTimeLeft(String time) {
+    return '剩余 $time';
+  }
+
+  @override
+  String durationHours(int hours) {
+    return '$hours 小时';
+  }
+
+  @override
+  String durationMinutes(int minutes) {
+    return '$minutes 分钟';
+  }
+
+  @override
+  String get dockAllApps => '所有应用';
+
+  @override
   String get showWatchNextSection => '显示“继续观看”分区';
 
   @override
