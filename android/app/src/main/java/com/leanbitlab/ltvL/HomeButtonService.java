@@ -20,6 +20,8 @@ package com.omeda.arc;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.os.Handler;
@@ -27,6 +29,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.ImageView;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
@@ -37,8 +40,9 @@ import android.view.accessibility.AccessibilityNodeInfo;
  *
  * Android only switches to this launcher once it has drawn its first frame, which takes seconds on a
  * cold start (after boot), so until then the stock home screen stays visible. On a cold start the
- * service covers it with a black overlay that MainActivity removes when its UI shows, or that goes
- * by itself after {@link #COVER_TIMEOUT_MS}.
+ * service covers it with an overlay showing this launcher's home screen as last seen (black until
+ * that picture is loaded, or if there is none), which MainActivity removes when its UI shows, or
+ * that goes by itself after {@link #COVER_TIMEOUT_MS}.
  */
 public class HomeButtonService extends AccessibilityService {
     static final String STOCK_HOME_PACKAGE = "com.google.android.apps.tv.launcherx";
@@ -113,8 +117,9 @@ public class HomeButtonService extends AccessibilityService {
         if (cover != null) {
             return;
         }
-        View view = new View(this);
+        ImageView view = new ImageView(this);
         view.setBackgroundColor(Color.BLACK);
+        view.setScaleType(ImageView.ScaleType.FIT_XY);
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -131,6 +136,17 @@ public class HomeButtonService extends AccessibilityService {
         }
         cover = view;
         handler.postDelayed(coverTimeout, COVER_TIMEOUT_MS);
+        String snapshot = MainActivity.homeSnapshotFile(this).getPath();
+        new Thread(() -> {
+            Bitmap picture = BitmapFactory.decodeFile(snapshot);
+            if (picture != null) {
+                handler.post(() -> {
+                    if (cover == view) {
+                        view.setImageBitmap(picture);
+                    }
+                });
+            }
+        }, "home-snapshot-load").start();
     }
 
     private void removeCover() {

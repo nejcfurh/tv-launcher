@@ -51,6 +51,7 @@ import java.util.List;
 import java.util.Map;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import android.app.usage.NetworkStats;
 import android.app.usage.NetworkStatsManager;
 import android.app.AppOpsManager;
@@ -116,7 +117,54 @@ public class MainActivity extends FlutterActivity {
     @Override
     protected void onDestroy() {
         created = false;
+        snapshotHandler.removeCallbacks(snapshotTask);
         super.onDestroy();
+    }
+
+    /** The home screen as last shown, for HomeButtonService to show while this launcher starts. */
+    static File homeSnapshotFile(Context context) {
+        return new File(context.getFilesDir(), "home_snapshot.jpg");
+    }
+
+    private static final int HOME_SNAPSHOT_MAX_WIDTH = 1920;
+    // Taken once the home screen has been on screen and focused this long, so it shows it settled
+    // and the read-back never lands on the moment an app is being opened.
+    private static final long HOME_SNAPSHOT_DELAY_MS = 3000;
+
+    private final android.os.Handler snapshotHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable snapshotTask = this::saveHomeSnapshot;
+
+    // The last frame is read here (main thread), then scaled and written on a background thread.
+    private void saveHomeSnapshot() {
+        FlutterEngine engine = getFlutterEngine();
+        if (!uiDisplayed || engine == null) {
+            return;
+        }
+        final Bitmap frame;
+        try {
+            frame = engine.getRenderer().getBitmap();
+        } catch (RuntimeException e) {
+            return;
+        }
+        if (frame == null) {
+            return;
+        }
+        final File target = homeSnapshotFile(this);
+        new Thread(() -> {
+            Bitmap scaled = frame;
+            if (frame.getWidth() > HOME_SNAPSHOT_MAX_WIDTH) {
+                int height = Math.round(frame.getHeight() * (HOME_SNAPSHOT_MAX_WIDTH / (float) frame.getWidth()));
+                scaled = Bitmap.createScaledBitmap(frame, HOME_SNAPSHOT_MAX_WIDTH, height, true);
+            }
+            File temp = new File(target.getPath() + ".tmp");
+            try (FileOutputStream out = new FileOutputStream(temp)) {
+                scaled.compress(Bitmap.CompressFormat.JPEG, 85, out);
+            } catch (Exception e) {
+                temp.delete();
+                return;
+            }
+            temp.renameTo(target);
+        }, "home-snapshot").start();
     }
 
     @Override
@@ -139,6 +187,10 @@ public class MainActivity extends FlutterActivity {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus && uiDisplayed) {
             HomeButtonService.hideCover();
+        }
+        snapshotHandler.removeCallbacks(snapshotTask);
+        if (hasFocus) {
+            snapshotHandler.postDelayed(snapshotTask, HOME_SNAPSHOT_DELAY_MS);
         }
     }
 
