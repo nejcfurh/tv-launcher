@@ -16,6 +16,20 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+/// `TvContract.WatchNextPrograms.COLUMN_TYPE` values.
+const kWatchNextTypeMovie = 0;
+const kWatchNextTypeTvSeries = 1;
+const kWatchNextTypeTvSeason = 2;
+const kWatchNextTypeTvEpisode = 3;
+
+/// Watched share in percent, or null unless both the position and the duration are known (> 0).
+int? computeProgressPercent(int? positionMillis, int? durationMillis) {
+  if (positionMillis == null || durationMillis == null || positionMillis <= 0 || durationMillis <= 0) {
+    return null;
+  }
+  return (positionMillis * 100 / durationMillis).round().clamp(0, 100);
+}
+
 class WatchNextItem {
   final int id;
   final String title;
@@ -31,6 +45,18 @@ class WatchNextItem {
   final int? watchNextType;
   final String? aspectRatio;
 
+  /// Season and episode as the app displays them (they can be "1A", "Special"...).
+  final String? seasonNumber;
+  final String? episodeNumber;
+  final int? playbackPositionMillis;
+
+  /// Canonical genre constants (`TvContract.Programs.Genres`), such as COMEDY.
+  final List<String> genres;
+  final String? releaseDate;
+
+  /// One of the kWatchNextType* values, or null when the app did not say.
+  final int? programType;
+
   WatchNextItem({
     required this.id,
     required this.title,
@@ -45,6 +71,12 @@ class WatchNextItem {
     this.intentUri,
     this.watchNextType,
     this.aspectRatio,
+    this.seasonNumber,
+    this.episodeNumber,
+    this.playbackPositionMillis,
+    this.genres = const [],
+    this.releaseDate,
+    this.programType,
   });
 
   bool get hasImage {
@@ -53,7 +85,19 @@ class WatchNextItem {
     return (poster != null && poster.isNotEmpty) || (backdrop != null && backdrop.isNotEmpty);
   }
 
+  /// Time left to watch, or null unless both the position and the duration are known.
+  Duration? get remaining {
+    final position = playbackPositionMillis;
+    final total = duration;
+    if (position == null || total == null || position <= 0 || total <= 0) {
+      return null;
+    }
+    return Duration(milliseconds: (total - position).clamp(0, total));
+  }
+
   factory WatchNextItem.fromMap(Map<dynamic, dynamic> map) {
+    final duration = _positiveInt(map['duration']);
+    final position = _positiveInt(map['playbackPosition']);
     return WatchNextItem(
       id: map['id'] ?? 0,
       title: map['title'] ?? '',
@@ -62,14 +106,23 @@ class WatchNextItem {
       backdropUri: map['backdropUri'],
       packageName: map['packageName'],
       contentId: map['contentId'],
-      progressPercent: map['progressPercent'],
-      duration: map['duration'],
+      progressPercent: computeProgressPercent(position, duration) ?? _positiveInt(map['progressPercent']),
+      duration: duration,
       lastEngagementDate: map['lastEngagementDate'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['lastEngagementDate'])
           : null,
       intentUri: map['intentUri'],
       watchNextType: map['watchNextType'],
       aspectRatio: map['aspectRatio'],
+      seasonNumber: _nonBlank(map['season']),
+      episodeNumber: _nonBlank(map['episode']),
+      playbackPositionMillis: position,
+      genres: [
+        for (final genre in (map['genres'] as List?) ?? const [])
+          if (_nonBlank(genre) case final value?) value,
+      ],
+      releaseDate: _nonBlank(map['releaseDate']),
+      programType: map['programType'] is int ? map['programType'] : null,
     );
   }
 
@@ -88,6 +141,20 @@ class WatchNextItem {
       'intentUri': intentUri,
       'watchNextType': watchNextType,
       'aspectRatio': aspectRatio,
+      'season': seasonNumber,
+      'episode': episodeNumber,
+      'playbackPosition': playbackPositionMillis,
+      'genres': genres,
+      'releaseDate': releaseDate,
+      'programType': programType,
     };
   }
 }
+
+String? _nonBlank(Object? value) {
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  return trimmed.isEmpty ? null : trimmed;
+}
+
+int? _positiveInt(Object? value) => value is int && value > 0 ? value : null;

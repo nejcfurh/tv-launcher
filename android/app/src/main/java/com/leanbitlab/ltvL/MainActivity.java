@@ -44,6 +44,7 @@ import androidx.core.content.FileProvider;
 import androidx.annotation.RequiresApi;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -858,12 +859,7 @@ public class MainActivity extends FlutterActivity {
 
             String sortOrder = TvContract.WatchNextPrograms.COLUMN_LAST_ENGAGEMENT_TIME_UTC_MILLIS + " DESC";
 
-            try (Cursor cursor = getContentResolver().query(
-                    TvContract.WatchNextPrograms.CONTENT_URI,
-                    projection,
-                    null,
-                    null,
-                    sortOrder)) {
+            try (Cursor cursor = queryWatchNext(projection, sortOrder)) {
 
                 if (cursor != null && cursor.moveToFirst()) {
                     int count = 0;
@@ -923,7 +919,18 @@ public class MainActivity extends FlutterActivity {
                                 item.put("lastEngagementDate", cursor.getLong(lastEngIndex));
                             }
 
-                            item.put("progressPercent", 0);
+                            // Hero metadata. Apps fill these unevenly; a missing or empty value is
+                            // sent as null and the hero hides it. Progress is computed in Dart from
+                            // the position and the duration.
+                            item.put("season", readNonBlankString(cursor, TvContract.WatchNextPrograms.COLUMN_SEASON_DISPLAY_NUMBER));
+                            item.put("episode", readNonBlankString(cursor, TvContract.WatchNextPrograms.COLUMN_EPISODE_DISPLAY_NUMBER));
+                            item.put("releaseDate", readNonBlankString(cursor, TvContract.WatchNextPrograms.COLUMN_RELEASE_DATE));
+                            item.put("playbackPosition", readPositiveLong(cursor, TvContract.WatchNextPrograms.COLUMN_LAST_PLAYBACK_POSITION_MILLIS));
+                            item.put("programType", readInteger(cursor, TvContract.WatchNextPrograms.COLUMN_TYPE));
+                            String genres = readNonBlankString(cursor, TvContract.WatchNextPrograms.COLUMN_CANONICAL_GENRE);
+                            item.put("genres", genres != null
+                                ? new ArrayList<>(Arrays.asList(TvContract.Programs.Genres.decode(genres)))
+                                : null);
 
                             items.add(item);
                             count++;
@@ -941,6 +948,54 @@ public class MainActivity extends FlutterActivity {
 
         android.util.Log.d("MainActivity", "getWatchNextItems: total retrieved = " + items.size() + ", limit = " + limit);
         return items.subList(0, Math.min(items.size(), limit));
+    }
+
+    private static final String[] WATCH_NEXT_METADATA_COLUMNS = {
+        TvContract.WatchNextPrograms.COLUMN_SEASON_DISPLAY_NUMBER,
+        TvContract.WatchNextPrograms.COLUMN_EPISODE_DISPLAY_NUMBER,
+        TvContract.WatchNextPrograms.COLUMN_LAST_PLAYBACK_POSITION_MILLIS,
+        TvContract.WatchNextPrograms.COLUMN_CANONICAL_GENRE,
+        TvContract.WatchNextPrograms.COLUMN_RELEASE_DATE,
+        TvContract.WatchNextPrograms.COLUMN_TYPE
+    };
+
+    /**
+     * Queries Watch Next with the hero metadata columns. If the provider rejects any of them, falls
+     * back to the base columns, so the row keeps working without the metadata.
+     */
+    private Cursor queryWatchNext(String[] baseProjection, String sortOrder) {
+        String[] projection = new String[baseProjection.length + WATCH_NEXT_METADATA_COLUMNS.length];
+        System.arraycopy(baseProjection, 0, projection, 0, baseProjection.length);
+        System.arraycopy(WATCH_NEXT_METADATA_COLUMNS, 0, projection, baseProjection.length, WATCH_NEXT_METADATA_COLUMNS.length);
+        try {
+            return getContentResolver().query(TvContract.WatchNextPrograms.CONTENT_URI, projection, null, null, sortOrder);
+        } catch (IllegalArgumentException | android.database.SQLException e) {
+            android.util.Log.w("MainActivity", "Watch Next metadata columns rejected, using base columns: " + e.getMessage());
+            return getContentResolver().query(TvContract.WatchNextPrograms.CONTENT_URI, baseProjection, null, null, sortOrder);
+        }
+    }
+
+    private static String readNonBlankString(Cursor cursor, String column) {
+        int index = cursor.getColumnIndex(column);
+        if (index < 0 || cursor.isNull(index)) {
+            return null;
+        }
+        String value = cursor.getString(index);
+        return value == null || value.trim().isEmpty() ? null : value.trim();
+    }
+
+    private static Long readPositiveLong(Cursor cursor, String column) {
+        int index = cursor.getColumnIndex(column);
+        if (index < 0 || cursor.isNull(index)) {
+            return null;
+        }
+        long value = cursor.getLong(index);
+        return value > 0 ? value : null;
+    }
+
+    private static Integer readInteger(Cursor cursor, String column) {
+        int index = cursor.getColumnIndex(column);
+        return index < 0 || cursor.isNull(index) ? null : cursor.getInt(index);
     }
 
     private boolean launchWatchNextItem(String packageName, String contentId, String action) {
