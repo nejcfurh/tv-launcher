@@ -278,8 +278,16 @@ const _kTitleTextStyle = TextStyle(
   shadows: [Shadow(color: Color(0x66000000), offset: Offset(0, 1), blurRadius: 6)],
 );
 
-const _kMeta1TextStyle = TextStyle(color: Color(0xEBFFFFFF), fontSize: 15, fontWeight: FontWeight.w500); // 92%
-const _kMeta2TextStyle = TextStyle(color: Color(0xA6FFFFFF), fontSize: 12); // 65% white
+// Line height and letter spacing are set here, so the theme's body text style (1.43 line height)
+// does not push the Watch button out of the hero's fixed box. 1.17 is Roboto's own line height.
+const _kMeta1TextStyle = TextStyle(
+  color: Color(0xEBFFFFFF), // 92% white
+  fontSize: 15,
+  fontWeight: FontWeight.w500,
+  height: 1.17,
+  letterSpacing: 0,
+);
+const _kMeta2TextStyle = TextStyle(color: Color(0xA6FFFFFF), fontSize: 12, height: 1.17, letterSpacing: 0); // 65%
 
 /// Service, title, metadata rows and progress. Missing rows are removed, and the rows below move
 /// up. There is no synopsis.
@@ -349,7 +357,9 @@ class _HeroInfo extends StatelessWidget {
           style: _kTitleTextStyle,
         ),
 
-        for (final (index, row) in metaRows.indexed) ...[SizedBox(height: index == 0 ? 11.4 : 4.4), row],
+        // Text line heights round to whole dp (title 40, rows 18 and 14), so these gaps put the rows at
+        // y = 306 and 328, the progress bar at 353 and the Watch button at 369.
+        for (final (index, row) in metaRows.indexed) ...[SizedBox(height: index == 0 ? 11 : 4), row],
 
         const SizedBox(height: 11),
         // Only when the app reported a playback position.
@@ -513,7 +523,7 @@ class _HeroWatchButtonState extends State<_HeroWatchButton> {
                   const SizedBox(width: 7),
                   Text(
                     label,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: foreground),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, letterSpacing: 0, color: foreground),
                   ),
                 ],
               ),

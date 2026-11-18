@@ -216,6 +216,7 @@ const List<Shadow> _kClockShadows = [
 const TextStyle _kDateTextStyle = TextStyle(
   fontSize: 14,
   fontWeight: FontWeight.w400,
+  letterSpacing: 0,
   color: Color(0xBFFFFFFF), // 75% white
   shadows: _kClockShadows,
 );
@@ -223,6 +224,7 @@ const TextStyle _kDateTextStyle = TextStyle(
 const TextStyle _kTimeTextStyle = TextStyle(
   fontSize: 22,
   fontWeight: FontWeight.bold,
+  letterSpacing: 0,
   color: Colors.white,
   shadows: _kClockShadows,
 );

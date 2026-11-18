@@ -313,6 +313,20 @@ void main() {
       expect(tester.getSize(find.byKey(const Key('hero_progress'))), const Size(160, 2));
     });
 
+    testWidgets('with every row present the Watch button ends exactly at the bottom of the hero box', (tester) async {
+      watchNextService.testItems = [fullSeriesItem];
+      await tester.pumpWidget(createTestWidget(items: [fullSeriesItem]));
+      await tester.pumpAndSettle();
+
+      final heroTop = tester.getTopLeft(find.byType(WatchNextHero)).dy;
+      final button = find.ancestor(of: find.text('Watch'), matching: find.byType(AnimatedContainer));
+      expect(tester.getBottomLeft(button).dy - heroTop, moreOrLessEquals(kWatchNextHeroHeight, epsilon: 0.5));
+      // Rows sit where the spec puts them, relative to the service row at y = 226.
+      expect(tester.getTopLeft(find.byKey(const Key('hero_title'))).dy - heroTop, moreOrLessEquals(29, epsilon: 0.5));
+      expect(tester.getTopLeft(find.byKey(const Key('hero_meta_1'))).dy - heroTop, moreOrLessEquals(80, epsilon: 0.5));
+      expect(tester.getTopLeft(find.byKey(const Key('hero_progress'))).dy - heroTop, moreOrLessEquals(127, epsilon: 0.5));
+    });
+
     testWidgets('missing rows are removed and the Watch button moves up', (tester) async {
       watchNextService.testItems = [fullSeriesItem];
       await tester.pumpWidget(createTestWidget(items: [fullSeriesItem]));
