@@ -49,7 +49,8 @@ const double kWatchNextHeroHeight = 179;
 
 const double _kWatchButtonHeight = 36;
 
-/// Duration of the carousel change: text and backdrop slide and fade together.
+/// Duration of the carousel change: the old item leaves in the first half, the new one arrives in
+/// the second, for the text and the backdrop alike.
 const kHeroCarouselDuration = Duration(milliseconds: 400);
 
 /// +1 when the carousel moved to the next item (wrapping around), -1 for the previous one.
@@ -62,6 +63,10 @@ int carouselDirection(int from, int to, int count) {
 
 /// A slide by [distance] (a fraction of the child's width) and a fade. The incoming child comes
 /// from the side of [direction]; the outgoing one leaves towards the other side.
+///
+/// Only the upper half of [animation] moves the child, so the two never show at once: an
+/// AnimatedSwitcher runs the outgoing child from 1 down to 0 (gone by 0.5) while the incoming one
+/// runs from 0 up to 1 (visible from 0.5).
 Widget carouselTransition({
   required Widget child,
   required Animation<double> animation,
@@ -70,7 +75,7 @@ Widget carouselTransition({
   double distance = 0.06,
 }) {
   final begin = Offset((incoming ? direction : -direction) * distance, 0);
-  final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+  final curved = CurvedAnimation(parent: animation, curve: const Interval(0.5, 1, curve: Curves.easeOutCubic));
   return FadeTransition(
     opacity: curved,
     child: SlideTransition(

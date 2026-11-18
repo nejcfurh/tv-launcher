@@ -404,20 +404,38 @@ void main() {
       expect(tester.getSize(button).height, 36);
     });
 
-    testWidgets('Left and Right slide the text over 400 ms', (tester) async {
+    testWidgets('Left and Right swap the text in 400 ms without showing both items at once', (tester) async {
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
 
+      double opacityOf(String title) {
+        final finder = find.text(title);
+        if (finder.evaluate().isEmpty) return 0;
+        return tester
+            .widgetList<FadeTransition>(find.ancestor(of: finder, matching: find.byType(FadeTransition)))
+            .fold(1.0, (opacity, fade) => opacity * fade.opacity.value);
+      }
+
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
-      // Halfway through, both titles are on screen.
-      expect(find.text('Severance'), findsOneWidget);
-      expect(find.text('Ted Lasso'), findsOneWidget);
+      var sawOld = false;
+      var sawNew = false;
+      for (var elapsed = 0; elapsed < 400; elapsed += 20) {
+        final old = opacityOf('Severance');
+        final next = opacityOf('Ted Lasso');
+        expect(old > 0 && next > 0, isFalse, reason: 'both visible at $elapsed ms: $old / $next');
+        sawOld |= old > 0;
+        sawNew |= next > 0;
+        if (elapsed == 100) expect(next, 0, reason: 'the new item waits until the old one is gone');
+        if (elapsed == 300) expect(old, 0, reason: 'the old item is gone by the second half');
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(sawOld, isTrue);
+      expect(sawNew, isTrue);
 
-      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(milliseconds: 20));
       expect(find.text('Severance'), findsNothing);
-      expect(find.text('Ted Lasso'), findsOneWidget);
+      expect(opacityOf('Ted Lasso'), 1);
     });
 
     test('every bundled source logo exists', () {
@@ -545,6 +563,32 @@ void main() {
     test('a jump goes the way the index moved', () {
       expect(carouselDirection(1, 4, 6), 1);
       expect(carouselDirection(4, 1, 6), -1);
+    });
+  });
+
+  group('carouselTransition', () {
+    // An AnimatedSwitcher runs the incoming child 0 → 1 and the outgoing one 1 → 0 over the same
+    // time, so at elapsed fraction t the incoming value is t and the outgoing value is 1 - t.
+    double opacityAt(double value, {required bool incoming}) {
+      final fade = carouselTransition(
+        child: const SizedBox(),
+        animation: AlwaysStoppedAnimation(value),
+        incoming: incoming,
+        direction: 1,
+      ) as FadeTransition;
+      return fade.opacity.value;
+    }
+
+    test('the outgoing child is gone before the incoming one appears', () {
+      for (var t = 0.0; t <= 1.0; t += 0.05) {
+        final outgoing = opacityAt(1 - t, incoming: false);
+        final incoming = opacityAt(t, incoming: true);
+        expect(outgoing > 0 && incoming > 0, isFalse, reason: 't = $t: $outgoing / $incoming');
+      }
+      expect(opacityAt(1, incoming: false), 1);
+      expect(opacityAt(0.5, incoming: false), 0);
+      expect(opacityAt(0.5, incoming: true), 0);
+      expect(opacityAt(1, incoming: true), 1);
     });
   });
 }
