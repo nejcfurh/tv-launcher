@@ -33,10 +33,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'flauncher_app.dart';
+import 'memory_budget.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   initializeDateFormatting();
+  // After the first frame, when the screen size is known.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    unawaited(applyMemoryBudget(views.isEmpty ? Size.zero : views.first.physicalSize));
+  });
 
   final sharedPreferences = await SharedPreferences.getInstance();
   final fLauncherChannel = FLauncherChannel();
