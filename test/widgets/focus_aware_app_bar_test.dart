@@ -1,7 +1,11 @@
+import 'package:flauncher/flauncher_channel.dart';
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/launcher_state.dart';
+import 'package:flauncher/providers/network_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
+import 'package:flauncher/widgets/app_bar_focus_ring.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
+import 'package:flauncher/widgets/network_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
@@ -37,6 +41,7 @@ void main() {
           ChangeNotifierProvider<SettingsService>.value(value: settingsService),
           ChangeNotifierProvider<LauncherState>.value(value: launcherState),
           ChangeNotifierProvider<AppsService>.value(value: MockAppsService()),
+          ChangeNotifierProvider(create: (_) => NetworkService(FLauncherChannel())),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -46,6 +51,62 @@ void main() {
         ),
       );
     }
+
+    testWidgets('settings glyph starts and the clock ends on the 48 dp keylines', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      final width = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+      expect(tester.getTopLeft(find.byIcon(Icons.settings_outlined)).dx, 48);
+      expect(tester.getSize(find.byIcon(Icons.settings_outlined)), const Size(18, 18));
+      expect(tester.getTopRight(find.byKey(const Key('statusbar_clock'))).dx, width - 48);
+    });
+
+    testWidgets('network status sits with the clock and cannot take focus', (tester) async {
+      when(settingsService.showNetworkIndicatorInStatusBar).thenReturn(true);
+      when(settingsService.showDateInStatusBar).thenReturn(true);
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      final network = find.byType(NetworkWidget);
+      expect(network, findsOneWidget);
+      expect(find.ancestor(of: network, matching: find.byType(AppBarFocusRing)), findsNothing);
+      expect(find.descendant(of: network, matching: find.byType(InkWell)), findsNothing);
+      expect(tester.getCenter(network).dx, greaterThan(tester.getCenter(find.byIcon(Icons.settings_outlined)).dx));
+      expect(tester.getTopRight(network).dx, lessThan(tester.getTopLeft(find.byKey(const Key('statusbar_date'))).dx));
+    });
+
+    testWidgets('date and time share a baseline and have no backdrop', (tester) async {
+      when(settingsService.showDateInStatusBar).thenReturn(true);
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      final date = find.descendant(of: find.byKey(const Key('statusbar_date')), matching: find.byType(Text));
+      final time = find.descendant(of: find.byKey(const Key('statusbar_clock')), matching: find.byType(Text));
+      final dateStyle = tester.widget<Text>(date).style!;
+      final timeStyle = tester.widget<Text>(time).style!;
+      expect(dateStyle.fontSize, 14);
+      expect(timeStyle.fontSize, 22);
+      expect(dateStyle.shadows, isNotEmpty);
+      expect(timeStyle.shadows, isNotEmpty);
+      double baseline(Finder f) {
+        final text = tester.widget<Text>(f);
+        final painter = TextPainter(
+          text: TextSpan(text: text.data, style: DefaultTextStyle.of(tester.element(f)).style.merge(text.style)),
+          textDirection: TextDirection.ltr,
+          textScaler: MediaQuery.textScalerOf(tester.element(f)),
+        )..layout();
+        final distance = painter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+        painter.dispose();
+        return tester.getTopLeft(f).dy + distance;
+      }
+      expect(baseline(date), moreOrLessEquals(baseline(time), epsilon: 0.5));
+      // Nothing with a visible fill sits behind the characters.
+      bool visibleFill(Widget w) =>
+          (w is ColoredBox && w.color.a > 0) ||
+          (w is DecoratedBox && w.decoration is BoxDecoration && ((w.decoration as BoxDecoration).color?.a ?? 0) > 0);
+      expect(find.ancestor(of: date, matching: find.byWidgetPredicate(visibleFill)), findsNothing);
+    });
 
     testWidgets('status bar is fully visible when neither autoHide nor hideInGrid is active', (tester) async {
       await tester.pumpWidget(createTestWidget());

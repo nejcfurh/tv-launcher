@@ -308,9 +308,9 @@ void main() {
 
     expect(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")), findsOneWidget);
     expect(find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")), findsNothing);
-    // Play Store shows its own icon; the browser shows a globe whichever browser is installed.
+    // All shortcuts are mono glyphs: a shopping bag for the Play Store, a globe for whichever browser is installed.
     expect(
-      find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.android.vending")), matching: find.byType(Image)),
+      find.descendant(of: find.byKey(const Key("top_bar_shortcut_com.android.vending")), matching: find.byIcon(Icons.shop_outlined)),
       findsOneWidget,
     );
     expect(
@@ -323,7 +323,7 @@ void main() {
     verify(appsService.launchApp(browser));
   });
 
-  testWidgets("Router HDD shortcut shows the bare VLC cone", (tester) async {
+  testWidgets("Router HDD shortcut shows the bare VLC cone, tinted white", (tester) async {
     final appsService = mkAppService();
     final vlc = fakeApp(packageName: "org.videolan.vlc", name: "VLC", version: "1.0.0");
     when(appsService.categoriesWithApps).thenReturn([]);
@@ -336,7 +336,8 @@ void main() {
       find.descendant(
         of: find.byKey(const Key("top_bar_shortcut_org.videolan.vlc")),
         matching: find.byWidgetPredicate(
-            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/vlc_cone.png'),
+            (w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == 'assets/vlc_cone.png' &&
+                w.color == const Color(0xCCFFFFFF) && w.colorBlendMode == BlendMode.srcIn),
       ),
       findsOneWidget,
     );

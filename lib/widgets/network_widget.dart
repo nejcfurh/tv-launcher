@@ -5,8 +5,19 @@ import 'package:provider/provider.dart';
 class NetworkWidget extends StatelessWidget
 {
   final bool interactive;
+  final double size;
+  final Color? color;
+  final EdgeInsetsGeometry padding;
+  final List<Shadow> shadows;
 
-  const NetworkWidget({super.key, this.interactive = false});
+  const NetworkWidget({
+    super.key,
+    this.interactive = false,
+    this.size = 20,
+    this.color,
+    this.padding = const EdgeInsets.all(4.0),
+    this.shadows = const [Shadow(color: Colors.black54, offset: Offset(0, 2), blurRadius: 8)],
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +27,7 @@ class NetworkWidget extends StatelessWidget
         final (networkType, cellularNetworkType, wirelessSignalLevel) = state;
         final networkService = context.read<NetworkService>();
         IconData iconData;
-        Color? iconColor;
+        Color? iconColor = color;
 
         switch (networkType)
         {
@@ -68,19 +79,8 @@ class NetworkWidget extends StatelessWidget
         }
 
         final iconWidget = Padding(
-          padding: const EdgeInsets.all(4.0),
-          child: Icon(
-            iconData,
-            size: 20,
-            color: iconColor,
-            shadows: const [
-              Shadow(
-                color: Colors.black54,
-                offset: Offset(0, 2),
-                blurRadius: 8,
-              ),
-            ],
-          ),
+          padding: padding,
+          child: Icon(iconData, size: size, color: iconColor, shadows: shadows),
         );
 
         if (!interactive) {
