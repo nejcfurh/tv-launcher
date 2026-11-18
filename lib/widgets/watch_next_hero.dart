@@ -49,7 +49,38 @@ const double kWatchNextHeroHeight = 179;
 
 const double _kWatchButtonHeight = 36;
 
-class WatchNextHero extends StatelessWidget {
+/// Duration of the carousel change: text and backdrop slide and fade together.
+const kHeroCarouselDuration = Duration(milliseconds: 400);
+
+/// +1 when the carousel moved to the next item (wrapping around), -1 for the previous one.
+int carouselDirection(int from, int to, int count) {
+  if (count <= 1 || from == to) return 1;
+  if (to == (from + 1) % count) return 1;
+  if (to == (from - 1 + count) % count) return -1;
+  return to > from ? 1 : -1;
+}
+
+/// A slide by [distance] (a fraction of the child's width) and a fade. The incoming child comes
+/// from the side of [direction]; the outgoing one leaves towards the other side.
+Widget carouselTransition({
+  required Widget child,
+  required Animation<double> animation,
+  required bool incoming,
+  required int direction,
+  double distance = 0.06,
+}) {
+  final begin = Offset((incoming ? direction : -direction) * distance, 0);
+  final curved = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+  return FadeTransition(
+    opacity: curved,
+    child: SlideTransition(
+      position: Tween(begin: begin, end: Offset.zero).animate(curved),
+      child: child,
+    ),
+  );
+}
+
+class WatchNextHero extends StatefulWidget {
   final List<WatchNextItem> items;
   final bool isFirstSection;
   final bool handleUpNavigationToSettings;
@@ -64,7 +95,17 @@ class WatchNextHero extends StatelessWidget {
   });
 
   @override
+  State<WatchNextHero> createState() => _WatchNextHeroState();
+}
+
+class _WatchNextHeroState extends State<WatchNextHero> {
+  bool _hasFocus = false;
+  int? _lastIndex;
+  int _direction = 1;
+
+  @override
   Widget build(BuildContext context) {
+    final items = widget.items;
     if (items.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -72,6 +113,10 @@ class WatchNextHero extends StatelessWidget {
     final watchNextService = context.watch<WatchNextService>();
     final activeItem = watchNextService.activeHeroItem ?? items.first;
     final activeIndex = watchNextService.activeHeroIndex.clamp(0, items.length - 1);
+    if (_lastIndex != null && _lastIndex != activeIndex) {
+      _direction = carouselDirection(_lastIndex!, activeIndex, items.length);
+    }
+    _lastIndex = activeIndex;
 
     final appsService = context.watch<AppsService>();
     final app = activeItem.packageName != null ? appsService.getApplication(activeItem.packageName) : null;
@@ -79,53 +124,142 @@ class WatchNextHero extends StatelessWidget {
     final localizations = AppLocalizations.of(context)!;
     final sourceBadge = (appName != null ? localizations.watchNextOn : localizations.watchNextSectionTitle)
         .toUpperCase();
+    final infoKey = ValueKey(activeItem.id);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: _kWatchNextHeroHorizontalPadding),
-      child: SizedBox(
-        height: kWatchNextHeroHeight,
-        // Rows are anchored at the top and keep their natural height; a large font scale spills
-        // past the box instead of failing layout.
-        child: OverflowBox(
-          alignment: Alignment.topLeft,
-          maxHeight: double.infinity,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _HeroInfo(
-                sourceBadge: sourceBadge,
-                sourcePackageName: app?.packageName,
-                sourceAppName: appName,
-                item: activeItem,
-              ),
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onFocusChange: (hasFocus) {
+        if (_hasFocus != hasFocus) setState(() => _hasFocus = hasFocus);
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: _kWatchNextHeroHorizontalPadding),
+            child: SizedBox(
+              height: kWatchNextHeroHeight,
+              // Rows are anchored at the top and keep their natural height; a large font scale spills
+              // past the box instead of failing layout.
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                maxHeight: double.infinity,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedSize(
+                      duration: kHeroCarouselDuration,
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment.topLeft,
+                      child: AnimatedSwitcher(
+                        duration: kHeroCarouselDuration,
+                        layoutBuilder: (current, previous) =>
+                            Stack(alignment: Alignment.topLeft, children: [...previous, if (current != null) current]),
+                        transitionBuilder: (child, animation) => carouselTransition(
+                          child: child,
+                          animation: animation,
+                          incoming: child.key == infoKey,
+                          direction: _direction,
+                        ),
+                        child: _HeroInfo(
+                          key: infoKey,
+                          sourceBadge: sourceBadge,
+                          sourcePackageName: app?.packageName,
+                          sourceAppName: appName,
+                          item: activeItem,
+                        ),
+                      ),
+                    ),
 
-              // Action Button and Carousel indicators
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  _HeroWatchButton(
-                    item: activeItem,
-                    autofocus: isFirstSection,
-                    handleUpNavigationToSettings: handleUpNavigationToSettings,
-                    onItemFocused: onItemFocused,
-                    onPrev: watchNextService.prevHeroItem,
-                    onNext: watchNextService.nextHeroItem,
-                    totalItems: items.length,
-                  ),
-                  if (items.length > 1) ...[
-                    const SizedBox(width: 20),
-                    _HeroPaginationIndicator(currentIndex: activeIndex, totalItems: items.length),
+                    // Watch button, and the carousel dots right-aligned on the x = 912 keyline.
+                    SizedBox(
+                      height: _kWatchButtonHeight,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          _HeroWatchButton(
+                            item: activeItem,
+                            autofocus: widget.isFirstSection,
+                            handleUpNavigationToSettings: widget.handleUpNavigationToSettings,
+                            onItemFocused: widget.onItemFocused,
+                            onPrev: watchNextService.prevHeroItem,
+                            onNext: watchNextService.nextHeroItem,
+                            totalItems: items.length,
+                          ),
+                          const Spacer(),
+                          if (items.length > 1)
+                            _HeroPaginationIndicator(currentIndex: activeIndex, totalItems: items.length),
+                        ],
+                      ),
+                    ),
                   ],
-                ],
+                ),
               ),
-            ],
+            ),
           ),
-        ),
+          // Only while the hero has focus and there is somewhere to go.
+          if (_hasFocus && items.length > 1) ...[
+            const Positioned(left: _kChevronInset, top: _kChevronTop, child: _HeroChevron(pointsLeft: true)),
+            const Positioned(right: _kChevronInset, top: _kChevronTop, child: _HeroChevron(pointsLeft: false)),
+          ],
+        ],
       ),
     );
   }
+}
+
+/// Chevrons sit 14 dp from the screen edges, with their top at y = 250 (24 dp below the hero's top).
+const double _kChevronInset = 14;
+const double _kChevronTop = 24;
+const double _kChevronSize = 28;
+
+class _HeroChevron extends StatelessWidget {
+  final bool pointsLeft;
+
+  const _HeroChevron({required this.pointsLeft});
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: CustomPaint(
+      key: Key(pointsLeft ? 'hero_chevron_left' : 'hero_chevron_right'),
+      size: const Size.square(_kChevronSize),
+      painter: _ChevronPainter(pointsLeft: pointsLeft),
+    ),
+  );
+}
+
+/// A thin open chevron, drawn on a 24-unit grid like the mockup's glyph.
+class _ChevronPainter extends CustomPainter {
+  final bool pointsLeft;
+
+  const _ChevronPainter({required this.pointsLeft});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 24;
+    final path = pointsLeft
+        ? (Path()
+            ..moveTo(15 * unit, 4 * unit)
+            ..lineTo(7 * unit, 12 * unit)
+            ..lineTo(15 * unit, 20 * unit))
+        : (Path()
+            ..moveTo(9 * unit, 4 * unit)
+            ..lineTo(17 * unit, 12 * unit)
+            ..lineTo(9 * unit, 20 * unit));
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = const Color(0x80FFFFFF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2 * unit
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChevronPainter oldDelegate) => oldDelegate.pointsLeft != pointsLeft;
 }
 
 const _kBadgeTextStyle = TextStyle(
@@ -155,7 +289,13 @@ class _HeroInfo extends StatelessWidget {
   final String? sourceAppName;
   final WatchNextItem item;
 
-  const _HeroInfo({required this.sourceBadge, this.sourcePackageName, this.sourceAppName, required this.item});
+  const _HeroInfo({
+    super.key,
+    required this.sourceBadge,
+    this.sourcePackageName,
+    this.sourceAppName,
+    required this.item,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -329,10 +469,8 @@ class _HeroWatchButtonState extends State<_HeroWatchButton> {
 
   @override
   Widget build(BuildContext context) {
-    final localizations = AppLocalizations.of(context)!;
-    final isResume = widget.item.progressPercent != null && widget.item.progressPercent! > 0;
-    final label = isResume ? localizations.watchNextResume : localizations.watchNextWatch;
-
+    final label = AppLocalizations.of(context)!.watchNextWatch;
+    final foreground = _isHovered ? Colors.black : Colors.white;
     final double scale = _clicked ? 0.96 : 1.0;
 
     return RepaintBoundary(
@@ -359,30 +497,23 @@ class _HeroWatchButtonState extends State<_HeroWatchButton> {
               curve: Curves.easeOutCubic,
               height: _kWatchButtonHeight,
               alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.only(left: 18, right: 22),
               decoration: ShapeDecoration(
+                // Focused: solid white. Unfocused: 18% white with a 40% white border.
                 shape: StadiumBorder(
-                  side: BorderSide(color: _isHovered ? Colors.white : Colors.white.withValues(alpha: 0.35), width: 1.0),
+                  side: BorderSide(color: _isHovered ? Colors.white : const Color(0x66FFFFFF), width: 1),
                 ),
-                color: _isHovered ? Colors.white : Colors.white.withValues(alpha: 0.22),
-                shadows: _isHovered
-                    ? const [BoxShadow(color: Colors.black38, blurRadius: 8, offset: Offset(0, 3))]
-                    : const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
+                color: _isHovered ? Colors.white : const Color(0x2EFFFFFF),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Icon(Icons.play_arrow_rounded, size: 24, color: _isHovered ? Colors.black87 : Colors.white),
-                  const SizedBox(width: 8),
+                  Icon(Icons.play_arrow_rounded, size: 15, color: foreground),
+                  const SizedBox(width: 7),
                   Text(
                     label,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.3,
-                      color: _isHovered ? Colors.black87 : Colors.white,
-                    ),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: foreground),
                   ),
                 ],
               ),
@@ -403,6 +534,7 @@ class _HeroPaginationIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
+      key: const Key('hero_dots'),
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: List.generate(totalItems, (i) {
@@ -410,13 +542,13 @@ class _HeroPaginationIndicator extends StatelessWidget {
         return AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           curve: Curves.easeInOut,
-          margin: const EdgeInsets.symmetric(horizontal: 3),
+          // 6 dp apart; the last dot ends on the keyline.
+          margin: EdgeInsets.only(left: i == 0 ? 0 : 6),
           width: isActive ? 18 : 6,
-          height: 5,
+          height: 6,
           decoration: BoxDecoration(
-            color: isActive ? Colors.white : Colors.white38,
+            color: isActive ? Colors.white : const Color(0x80FFFFFF),
             borderRadius: BorderRadius.circular(3),
-            boxShadow: isActive ? [BoxShadow(color: Colors.white.withValues(alpha: 0.6), blurRadius: 6)] : null,
           ),
         );
       }),

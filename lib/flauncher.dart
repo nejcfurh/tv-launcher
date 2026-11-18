@@ -38,6 +38,7 @@ import 'package:flauncher/widgets/category_row.dart';
 import 'package:flauncher/widgets/launcher_alternative_view.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/wallpaper_video_background.dart';
+import 'package:flauncher/widgets/watch_next_hero.dart';
 import 'package:flauncher/widgets/watch_next_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -70,6 +71,8 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
   int _homePressGeneration = 0;
   final GlobalKey _dockKey = GlobalKey();
   final FocusNode _allAppsFocusNode = FocusNode(debugLabel: "dock_all_apps");
+  int _heroIndex = 0;
+  int _heroDirection = 1;
   late final LauncherState _launcherState;
   late final _HeroBackdropBaker _heroBackdropBaker = _HeroBackdropBaker();
 
@@ -128,6 +131,11 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                 final heroUri = isBigPicture ? watchNextService.getPosterUriForItem(activeItem) : null;
                 final heroBytes = isBigPicture ? watchNextService.getCachedPoster(heroUri) : null;
                 final hasHeroBackdrop = isBigPicture && heroBytes != null;
+                final heroIndex = watchNextService.activeHeroIndex;
+                if (heroIndex != _heroIndex) {
+                  _heroDirection = carouselDirection(_heroIndex, heroIndex, watchNextService.items.length);
+                  _heroIndex = heroIndex;
+                }
                 final screenSize = MediaQuery.sizeOf(context);
                 final dpr = MediaQuery.devicePixelRatioOf(context);
                 _heroBackdropBaker.update(
@@ -154,14 +162,21 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                                 listenable: _heroBackdropBaker,
                                 builder: (context, _) {
                                   final heroImage = _heroBackdropBaker.textures?.hero;
+                                  final Key heroKey = heroImage == null ? const ValueKey('empty_hero') : ObjectKey(heroImage);
+                                  // Slides with the hero text, in the direction the carousel moved.
                                   return AnimatedSwitcher(
                                     duration: _kHeroFadeDuration,
-                                    switchInCurve: Curves.easeOutCubic,
-                                    switchOutCurve: Curves.easeInCubic,
+                                    transitionBuilder: (child, animation) => carouselTransition(
+                                      child: child,
+                                      animation: animation,
+                                      incoming: child.key == heroKey,
+                                      direction: _heroDirection,
+                                      distance: 0.03,
+                                    ),
                                     child: heroImage == null
-                                        ? const SizedBox.expand(key: ValueKey('empty_hero'))
+                                        ? SizedBox.expand(key: heroKey)
                                         : RawImage(
-                                            key: ObjectKey(heroImage),
+                                            key: heroKey,
                                             image: heroImage,
                                             width: screenSize.width,
                                             height: screenSize.height,
@@ -856,7 +871,8 @@ class _CachedGradientBackgroundState extends State<_CachedGradientBackground> {
   }
 }
 
-const _kHeroFadeDuration = Duration(milliseconds: 600);
+/// Same 400 ms as the hero text, so text and backdrop change together.
+const _kHeroFadeDuration = kHeroCarouselDuration;
 
 class _HeroBackdropTextures {
   final ui.Image hero;

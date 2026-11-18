@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flauncher/l10n/app_localizations.dart';
 import 'package:flauncher/models/app.dart';
@@ -9,6 +8,7 @@ import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/providers/watch_next_service.dart';
 import 'package:flauncher/widgets/watch_next_hero.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
@@ -203,14 +203,16 @@ void main() {
       );
     }
 
-    testWidgets('renders title and badge, and never the synopsis', (tester) async {
+    testWidgets('renders title, badge and Watch, and never the synopsis', (tester) async {
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
 
       expect(find.text('Severance'), findsOneWidget);
       expect(find.textContaining('Mark leads a team'), findsNothing);
       expect(find.text('WATCH NEXT ON'), findsOneWidget);
-      expect(find.text('Resume'), findsOneWidget);
+      // The label stays "Watch" even for an item with progress.
+      expect(find.text('Watch'), findsOneWidget);
+      expect(find.text('Resume'), findsNothing);
       expect(find.byIcon(Icons.play_arrow_rounded), findsOneWidget);
     });
 
@@ -315,7 +317,7 @@ void main() {
       watchNextService.testItems = [fullSeriesItem];
       await tester.pumpWidget(createTestWidget(items: [fullSeriesItem]));
       await tester.pumpAndSettle();
-      final fullButtonTop = tester.getTopLeft(find.text('Resume')).dy;
+      final fullButtonTop = tester.getTopLeft(find.text('Watch')).dy;
       final heroHeight = tester.getSize(find.byType(WatchNextHero)).height;
 
       final bare = WatchNextItem(id: 11, title: 'Bare item', packageName: 'com.netflix.ninja', description: 'A synopsis');
@@ -351,6 +353,59 @@ void main() {
       expect(find.byKey(const Key('hero_progress')), findsNothing);
     });
 
+    testWidgets('chevrons show only while the hero has focus and there is more than one item', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+      // The Watch button autofocuses (isFirstSection).
+      expect(find.byKey(const Key('hero_chevron_left')), findsOneWidget);
+      expect(find.byKey(const Key('hero_chevron_right')), findsOneWidget);
+      expect(tester.getTopLeft(find.byKey(const Key('hero_chevron_left'))).dx, 14);
+      final width = tester.getSize(find.byType(WatchNextHero)).width;
+      expect(tester.getTopRight(find.byKey(const Key('hero_chevron_right'))).dx, width - 14);
+
+      FocusManager.instance.primaryFocus?.unfocus();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('hero_chevron_left')), findsNothing);
+      expect(find.byKey(const Key('hero_chevron_right')), findsNothing);
+    });
+
+    testWidgets('a single item has no chevrons and no dots', (tester) async {
+      final single = [sampleItems.first];
+      watchNextService.testItems = single;
+      await tester.pumpWidget(createTestWidget(items: single));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('hero_chevron_left')), findsNothing);
+      expect(find.byKey(const Key('hero_dots')), findsNothing);
+    });
+
+    testWidgets('dots end on the right keyline, centred on the Watch button', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+      final width = tester.getSize(find.byType(WatchNextHero)).width;
+      final dots = find.byKey(const Key('hero_dots'));
+      expect(tester.getTopRight(dots).dx, width - 48);
+      expect(tester.getSize(dots).height, 6);
+      final button = find.ancestor(of: find.text('Watch'), matching: find.byType(AnimatedContainer));
+      expect(tester.getCenter(dots).dy, moreOrLessEquals(tester.getCenter(button).dy, epsilon: 0.5));
+      expect(tester.getSize(button).height, 36);
+    });
+
+    testWidgets('Left and Right slide the text over 400 ms', (tester) async {
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      // Halfway through, both titles are on screen.
+      expect(find.text('Severance'), findsOneWidget);
+      expect(find.text('Ted Lasso'), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.text('Severance'), findsNothing);
+      expect(find.text('Ted Lasso'), findsOneWidget);
+    });
+
     test('every bundled source logo exists', () {
       for (final logo in kSourceAppLogoAssets.values) {
         expect(File(logo.asset).existsSync(), isTrue, reason: logo.asset);
@@ -366,7 +421,7 @@ void main() {
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Resume'));
+      await tester.tap(find.text('Watch'));
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(watchNextService.launchedItem?.title, 'Severance');
@@ -401,7 +456,7 @@ void main() {
       // Find the AnimatedContainer corresponding to the button (the one with height 36)
       final watchButtonContainer = tester.widget<AnimatedContainer>(
         find.ancestor(
-          of: find.text('Resume'),
+          of: find.text('Watch'),
           matching: find.byType(AnimatedContainer),
         ),
       );
@@ -409,7 +464,7 @@ void main() {
 
       final initialSize = tester.getSize(
         find.ancestor(
-          of: find.text('Resume'),
+          of: find.text('Watch'),
           matching: find.byType(AnimatedContainer),
         ),
       );
@@ -420,7 +475,7 @@ void main() {
 
       final unfocusedSize = tester.getSize(
         find.ancestor(
-          of: find.text('Resume'),
+          of: find.text('Watch'),
           matching: find.byType(AnimatedContainer),
         ),
       );
@@ -462,6 +517,20 @@ void main() {
       final sizeWithoutSynopsis = tester.getSize(heroFinder);
 
       expect(sizeWithoutSynopsis.height, equals(sizeWithSynopsis.height));
+    });
+  });
+
+  group('carouselDirection', () {
+    test('next and previous, wrapping around the ends', () {
+      expect(carouselDirection(0, 1, 6), 1);
+      expect(carouselDirection(5, 0, 6), 1);
+      expect(carouselDirection(1, 0, 6), -1);
+      expect(carouselDirection(0, 5, 6), -1);
+    });
+
+    test('a jump goes the way the index moved', () {
+      expect(carouselDirection(1, 4, 6), 1);
+      expect(carouselDirection(4, 1, 6), -1);
     });
   });
 }
