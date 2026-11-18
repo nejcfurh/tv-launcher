@@ -17,6 +17,9 @@ import '../mocks.dart';
 import '../mocks.mocks.dart';
 
 class TestWatchNextService extends ChangeNotifier implements WatchNextService {
+  @override
+  Future<void> Function(WatchNextItem item)? heroSwitchGate;
+
   List<WatchNextItem> _items = [];
   int _activeHeroIndex = 0;
   WatchNextItem? launchedItem;

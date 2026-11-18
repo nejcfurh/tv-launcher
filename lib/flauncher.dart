@@ -47,6 +47,7 @@ import 'package:flauncher/l10n/app_localizations.dart';
 
 import 'models/app.dart';
 import 'models/category.dart';
+import 'models/watch_next_item.dart';
 
 /// The tray's edge sits 16 dp outside the content keyline (x = 48), so tiles line up with the
 /// top bar and the hero. The 34 dp below the tray (it ends at y = 506 on a 540 dp tall screen)
@@ -74,6 +75,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
   int _heroIndex = 0;
   int _heroDirection = 1;
   late final LauncherState _launcherState;
+  late final WatchNextService _watchNextService;
   late final _HeroBackdropBaker _heroBackdropBaker = _HeroBackdropBaker();
 
   /// Added to the spacer above the dock so the dock ends at the bottom of the screen.
@@ -88,6 +90,8 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     FLauncherChannel.setHomePressedHandler(_onHomePressed);
     _launcherState = context.read<LauncherState>();
     _launcherState.returnToDockHandler = _returnToDock;
+    _watchNextService = context.read<WatchNextService>();
+    _watchNextService.heroSwitchGate = _prepareHeroBackdrop;
   }
 
   @override
@@ -96,11 +100,25 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     if (_launcherState.returnToDockHandler == _returnToDock) {
       _launcherState.returnToDockHandler = null;
     }
+    if (_watchNextService.heroSwitchGate == _prepareHeroBackdrop) {
+      _watchNextService.heroSwitchGate = null;
+    }
     WidgetsBinding.instance.removeObserver(this);
     _allAppsFocusNode.dispose();
     _scrollController.dispose();
     _heroBackdropBaker.dispose();
     super.dispose();
+  }
+
+  /// Bakes the next hero item's backdrop before the hero shows it, so its text and picture change
+  /// together. A poster that is not loaded yet follows on its own once it arrives.
+  Future<void> _prepareHeroBackdrop(WatchNextItem item) async {
+    if (!mounted) return;
+    final settings = context.read<SettingsService>();
+    if (!settings.showWatchNextSection || !settings.watchNextBigPictureMode) return;
+    final bytes = _watchNextService.getCachedPoster(_watchNextService.getPosterUriForItem(item));
+    if (bytes == null) return;
+    await _heroBackdropBaker.prepare(bytes);
   }
 
   @override
@@ -878,13 +896,20 @@ class _HeroBackdropTextures {
   final ui.Image hero;
   final ui.Image gridBlur;
   final Uint8List bytes;
+  final Size size;
+  final double dpr;
   bool _disposed = false;
 
   _HeroBackdropTextures({
     required this.hero,
     required this.gridBlur,
     required this.bytes,
+    required this.size,
+    required this.dpr,
   });
+
+  bool matches(Uint8List bytes, Size size, double dpr) =>
+      identical(bytes, this.bytes) && size == this.size && dpr == this.dpr;
 
   void dispose() {
     if (_disposed) return;
@@ -896,13 +921,15 @@ class _HeroBackdropTextures {
 
 class _HeroBackdropBaker extends ChangeNotifier {
   _HeroBackdropTextures? _current;
+  /// Baked ahead by [prepare] for the hero item about to be shown; [update] shows it at once.
+  _HeroBackdropTextures? _prepared;
+  ({Uint8List bytes, Future<void> done})? _preparing;
   final List<_HeroBackdropTextures> _disposedTextures = [];
   Uint8List? _requestedBytes;
   Size _requestedSize = Size.zero;
   double _requestedDpr = 1.0;
-  Size _currentSize = Size.zero;
-  double _currentDpr = 1.0;
   bool _baking = false;
+  bool _isDisposed = false;
 
   _HeroBackdropTextures? get textures => _current;
 
@@ -927,12 +954,63 @@ class _HeroBackdropBaker extends ChangeNotifier {
       return;
     }
 
+    final prepared = _prepared;
+    if (prepared != null && prepared.matches(bytes, size, dpr)) {
+      _prepared = null;
+      _setCurrent(prepared);
+      // Runs during build: the hero backdrop is rebuilt in this frame anyway, so its transition
+      // starts with the hero text. The grid blur follows on the next frame.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_isDisposed) notifyListeners();
+      });
+      return;
+    }
+
     if (!_baking) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_baking && _requestedBytes != null) {
           _bake();
         }
       });
+    }
+  }
+
+  /// Bakes [bytes] at the current screen size without showing them, so the next [update] with the
+  /// same bytes can swap them in within the same frame.
+  Future<void> prepare(Uint8List bytes) {
+    final size = _requestedSize;
+    final dpr = _requestedDpr;
+    if (_isDisposed || size.width <= 0 || size.height <= 0) return Future.value();
+    if ((_current?.matches(bytes, size, dpr) ?? false) || (_prepared?.matches(bytes, size, dpr) ?? false)) {
+      return Future.value();
+    }
+    final pending = _preparing;
+    if (pending != null && identical(pending.bytes, bytes)) return pending.done;
+
+    bool isStale() => _isDisposed || !identical(_preparing?.bytes, bytes);
+    Future<void> run() async {
+      final textures = await _bakeTextures(bytes, size, dpr, isStale: isStale);
+      if (textures == null) return;
+      if (isStale()) {
+        textures.dispose();
+        return;
+      }
+      _preparing = null;
+      final old = _prepared;
+      _prepared = textures;
+      if (old != null) _scheduleDispose(old);
+    }
+
+    final done = run();
+    _preparing = (bytes: bytes, done: done);
+    return done;
+  }
+
+  void _setCurrent(_HeroBackdropTextures textures) {
+    final old = _current;
+    _current = textures;
+    if (old != null) {
+      _scheduleDispose(old);
     }
   }
 
@@ -948,99 +1026,16 @@ class _HeroBackdropBaker extends ChangeNotifier {
     if (_baking) return;
     _baking = true;
     try {
-      while (_requestedBytes != null &&
-          (_current == null ||
-              !identical(_requestedBytes, _current!.bytes) ||
-              _requestedSize != _currentSize ||
-              _requestedDpr != _currentDpr)) {
+      while (_requestedBytes != null && !(_current?.matches(_requestedBytes!, _requestedSize, _requestedDpr) ?? false)) {
         final bytes = _requestedBytes!;
-        final size = _requestedSize;
-        final dpr = _requestedDpr;
-
-        final pxSize = Size((size.width * dpr).roundToDouble(), (size.height * dpr).roundToDouble());
-        final codec = await ui.instantiateImageCodecWithSize(
-          await ui.ImmutableBuffer.fromUint8List(bytes),
-          getTargetSize: (w, h) {
-            final scale = min(1.0, max(pxSize.width / w, pxSize.height / h));
-            return ui.TargetImageSize(width: (w * scale).round(), height: (h * scale).round());
-          },
+        final textures = await _bakeTextures(
+          bytes,
+          _requestedSize,
+          _requestedDpr,
+          isStale: () => !identical(bytes, _requestedBytes),
         );
-        final source = (await codec.getNextFrame()).image;
-        codec.dispose();
-
-        if (!identical(bytes, _requestedBytes)) {
-          source.dispose();
-          continue;
-        }
-
-        // 1. Full-screen hero background with cinematic scrim
-        final heroRecorder = ui.PictureRecorder();
-        final heroCanvas = Canvas(heroRecorder);
-        paintImage(
-          canvas: heroCanvas,
-          rect: Offset.zero & pxSize,
-          image: source,
-          fit: BoxFit.cover,
-          alignment: Alignment.topCenter,
-        );
-        const _CinematicScrimPainter().paint(heroCanvas, pxSize);
-        final heroPicture = heroRecorder.endRecording();
-        final heroImage = heroPicture.toImageSync(pxSize.width.toInt(), pxSize.height.toInt());
-        heroPicture.dispose();
-
-        // 2. App grid blur snapshot (960x540, sigma 10)
-        final double targetWidth = min(size.width * dpr, 960.0);
-        final double targetHeight = min(size.height * dpr, 540.0);
-        final pxWidth = targetWidth.round();
-        final pxHeight = targetHeight.round();
-        final blurRect = Rect.fromLTWH(0, 0, pxWidth.toDouble(), pxHeight.toDouble());
-        final double scaleFactor = pxWidth / size.width;
-
-        final gridRecorder = ui.PictureRecorder();
-        final gridCanvas = Canvas(gridRecorder);
-        final gridPaint = Paint()
-          ..imageFilter = ui.ImageFilter.blur(
-            sigmaX: 10.0 * scaleFactor,
-            sigmaY: 10.0 * scaleFactor,
-            tileMode: TileMode.clamp,
-          );
-        gridCanvas.saveLayer(blurRect, gridPaint);
-        paintImage(
-          canvas: gridCanvas,
-          rect: blurRect,
-          image: source,
-          fit: BoxFit.cover,
-          alignment: Alignment.topCenter,
-          filterQuality: FilterQuality.low,
-        );
-        // Blur the scrimmed hero (what is actually on screen), otherwise the blur looks much brighter.
-        const _CinematicScrimPainter().paint(gridCanvas, blurRect.size);
-        gridCanvas.restore();
-        final gridPicture = gridRecorder.endRecording();
-        final gridImage = gridPicture.toImageSync(pxWidth, pxHeight);
-        gridPicture.dispose();
-
-        source.dispose();
-
-        if (!identical(bytes, _requestedBytes)) {
-          heroImage.dispose();
-          gridImage.dispose();
-          continue;
-        }
-
-        final old = _current;
-        _current = _HeroBackdropTextures(
-          hero: heroImage,
-          gridBlur: gridImage,
-          bytes: bytes,
-        );
-        _currentSize = size;
-        _currentDpr = dpr;
-
-        if (old != null) {
-          _scheduleDispose(old);
-        }
-
+        if (textures == null) continue;
+        _setCurrent(textures);
         notifyListeners();
       }
     } finally {
@@ -1048,14 +1043,98 @@ class _HeroBackdropBaker extends ChangeNotifier {
     }
   }
 
+  /// The full-screen hero picture and the grid blur for [bytes], or null when [isStale] turns true
+  /// on the way.
+  Future<_HeroBackdropTextures?> _bakeTextures(
+    Uint8List bytes,
+    Size size,
+    double dpr, {
+    required bool Function() isStale,
+  }) async {
+    final pxSize = Size((size.width * dpr).roundToDouble(), (size.height * dpr).roundToDouble());
+    final codec = await ui.instantiateImageCodecWithSize(
+      await ui.ImmutableBuffer.fromUint8List(bytes),
+      getTargetSize: (w, h) {
+        final scale = min(1.0, max(pxSize.width / w, pxSize.height / h));
+        return ui.TargetImageSize(width: (w * scale).round(), height: (h * scale).round());
+      },
+    );
+    final source = (await codec.getNextFrame()).image;
+    codec.dispose();
+
+    if (isStale()) {
+      source.dispose();
+      return null;
+    }
+
+    // 1. Full-screen hero background with cinematic scrim
+    final heroRecorder = ui.PictureRecorder();
+    final heroCanvas = Canvas(heroRecorder);
+    paintImage(
+      canvas: heroCanvas,
+      rect: Offset.zero & pxSize,
+      image: source,
+      fit: BoxFit.cover,
+      alignment: Alignment.topCenter,
+    );
+    const _CinematicScrimPainter().paint(heroCanvas, pxSize);
+    final heroPicture = heroRecorder.endRecording();
+    final heroImage = heroPicture.toImageSync(pxSize.width.toInt(), pxSize.height.toInt());
+    heroPicture.dispose();
+
+    // 2. App grid blur snapshot (960x540, sigma 10)
+    final double targetWidth = min(size.width * dpr, 960.0);
+    final double targetHeight = min(size.height * dpr, 540.0);
+    final pxWidth = targetWidth.round();
+    final pxHeight = targetHeight.round();
+    final blurRect = Rect.fromLTWH(0, 0, pxWidth.toDouble(), pxHeight.toDouble());
+    final double scaleFactor = pxWidth / size.width;
+
+    final gridRecorder = ui.PictureRecorder();
+    final gridCanvas = Canvas(gridRecorder);
+    final gridPaint = Paint()
+      ..imageFilter = ui.ImageFilter.blur(
+        sigmaX: 10.0 * scaleFactor,
+        sigmaY: 10.0 * scaleFactor,
+        tileMode: TileMode.clamp,
+      );
+    gridCanvas.saveLayer(blurRect, gridPaint);
+    paintImage(
+      canvas: gridCanvas,
+      rect: blurRect,
+      image: source,
+      fit: BoxFit.cover,
+      alignment: Alignment.topCenter,
+      filterQuality: FilterQuality.low,
+    );
+    // Blur the scrimmed hero (what is actually on screen), otherwise the blur looks much brighter.
+    const _CinematicScrimPainter().paint(gridCanvas, blurRect.size);
+    gridCanvas.restore();
+    final gridPicture = gridRecorder.endRecording();
+    final gridImage = gridPicture.toImageSync(pxWidth, pxHeight);
+    gridPicture.dispose();
+
+    source.dispose();
+
+    if (isStale()) {
+      heroImage.dispose();
+      gridImage.dispose();
+      return null;
+    }
+    return _HeroBackdropTextures(hero: heroImage, gridBlur: gridImage, bytes: bytes, size: size, dpr: dpr);
+  }
+
   @override
   void dispose() {
+    _isDisposed = true;
     for (final t in _disposedTextures) {
       t.dispose();
     }
     _disposedTextures.clear();
     _current?.dispose();
     _current = null;
+    _prepared?.dispose();
+    _prepared = null;
     super.dispose();
   }
 }

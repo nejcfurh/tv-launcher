@@ -75,25 +75,57 @@ class WatchNextService extends ChangeNotifier {
     return true;
   }
 
+  /// Runs before the hero shows another item, and the change waits for it (at most
+  /// [heroSwitchMaxWait]). The home screen bakes the item's backdrop here, so the text and the
+  /// picture start their transition in the same frame.
+  Future<void> Function(WatchNextItem item)? heroSwitchGate;
+
+  static const heroSwitchMaxWait = Duration(milliseconds: 600);
+
+  /// The index the user moved to while [heroSwitchGate] is still running; null when none is pending.
+  int? _requestedHeroIndex;
+  int _heroRequest = 0;
+
   void setActiveHeroIndex(int index) {
     if (_items.isEmpty) return;
     final clamped = index.clamp(0, _items.length - 1);
-    if (_activeHeroIndex != clamped) {
-      _activeHeroIndex = clamped;
-      _ensureActiveHeroImageLoaded();
-      notifyListeners();
+    if (clamped == (_requestedHeroIndex ?? _activeHeroIndex)) return;
+    final request = ++_heroRequest;
+    final gate = heroSwitchGate;
+    // Back to the item on screen: its backdrop is already there.
+    if (gate == null || clamped == _activeHeroIndex) {
+      _commitHeroIndex(clamped);
+      return;
     }
+    _requestedHeroIndex = clamped;
+    final item = _items[clamped];
+    ensurePosterLoaded(getPosterUriForItem(item));
+    // A slow or failing gate only delays the change; it never blocks the carousel.
+    unawaited(Future.sync(() => gate(item))
+        .timeout(heroSwitchMaxWait)
+        .catchError((Object _) {})
+        .whenComplete(() {
+      if (request == _heroRequest) _commitHeroIndex(clamped);
+    }));
+  }
+
+  void _commitHeroIndex(int index) {
+    _requestedHeroIndex = null;
+    if (index >= _items.length || index == _activeHeroIndex) return;
+    _activeHeroIndex = index;
+    _ensureActiveHeroImageLoaded();
+    notifyListeners();
   }
 
   void nextHeroItem() {
     if (_items.isEmpty) return;
-    final next = (_activeHeroIndex + 1) % _items.length;
+    final next = ((_requestedHeroIndex ?? _activeHeroIndex) + 1) % _items.length;
     setActiveHeroIndex(next);
   }
 
   void prevHeroItem() {
     if (_items.isEmpty) return;
-    final prev = (_activeHeroIndex - 1 + _items.length) % _items.length;
+    final prev = ((_requestedHeroIndex ?? _activeHeroIndex) - 1 + _items.length) % _items.length;
     setActiveHeroIndex(prev);
   }
 
@@ -215,6 +247,9 @@ class WatchNextService extends ChangeNotifier {
       filtered = filtered.take(maxItems);
     }
     _items = filtered.toList();
+    // A pending hero change pointed into the old list.
+    _heroRequest++;
+    _requestedHeroIndex = null;
 
     if (_activeHeroIndex >= _items.length) {
       _activeHeroIndex = 0;

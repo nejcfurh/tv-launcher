@@ -24,6 +24,7 @@ import 'package:flauncher/database.dart';
 import 'package:flauncher/flauncher.dart';
 import 'package:flauncher/flauncher_channel.dart';
 import 'package:flauncher/gradients.dart';
+import 'package:flauncher/models/watch_next_item.dart';
 import 'package:flauncher/l10n/app_localizations.dart';
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/launcher_state.dart';
@@ -39,6 +40,7 @@ import 'package:flauncher/widgets/category_row.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flauncher/widgets/settings/settings_panel_page.dart';
+import 'package:flauncher/widgets/watch_next_hero.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -341,6 +343,50 @@ void main() {
     await tester.tap(find.byKey(const Key("top_bar_shortcut_com.tcl.browser")));
     await tester.pump();
     verify(appsService.launchApp(browser));
+  });
+
+  testWidgets("A prepared hero backdrop starts its transition in the frame the hero item changes", (tester) async {
+    final settingsService = mkSettingsService();
+    when(settingsService.showWatchNextSection).thenReturn(true);
+    when(settingsService.watchNextBigPictureMode).thenReturn(true);
+    final first = WatchNextItem(id: 1, title: "The Office", posterUri: "content://poster/1");
+    final second = WatchNextItem(id: 2, title: "Nihce", posterUri: "content://poster/2");
+    // Two separate buffers: the backdrop is keyed on the bytes' identity.
+    final posters = {"content://poster/1": _onePixelPng(), "content://poster/2": _onePixelPng()};
+    var shown = first;
+    final watchNextService = mkWatchNextService();
+    when(watchNextService.activeHeroItem).thenAnswer((_) => shown);
+    when(watchNextService.getPosterUriForItem(any))
+        .thenAnswer((invocation) => (invocation.positionalArguments.single as WatchNextItem?)?.posterUri);
+    when(watchNextService.getCachedPoster(any))
+        .thenAnswer((invocation) => posters[invocation.positionalArguments.single]);
+
+    await _pumpWidgetWithProviders(tester, mkWallpaperService(), mkAppService(), settingsService, watchNextService);
+    final gate = verify(watchNextService.heroSwitchGate = captureAny).captured.single as Future<void> Function(WatchNextItem);
+
+    // The first backdrop bakes on its own.
+    final heroBackdrop = find.descendant(of: find.byKey(const ValueKey('hero_bg')), matching: find.byType(RawImage));
+    for (var i = 0; i < 20 && heroBackdrop.evaluate().isEmpty; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+      await tester.pump();
+    }
+    expect(heroBackdrop, findsOneWidget);
+    await tester.pump(kHeroCarouselDuration);
+    final firstImage = tester.widget<RawImage>(heroBackdrop).image;
+
+    // The service waits for the gate, then shows the next item.
+    await tester.runAsync(() => gate(second));
+    shown = second;
+    tester.element(find.byType(FLauncher)).markNeedsBuild();
+    await tester.pump();
+
+    // Old picture leaving and new picture arriving, from the very first frame of the change.
+    final images = tester.widgetList<RawImage>(heroBackdrop).map((raw) => raw.image).toList();
+    expect(images, hasLength(2));
+    expect(images.where((image) => image != firstImage), hasLength(1));
+
+    // The old picture is released a second after it leaves.
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets("Router HDD shortcut shows VLC's own icon in grayscale", (tester) async {
@@ -898,6 +944,15 @@ WallpaperService mkWallpaperService([bool wallpaper = true]) {
   when(wallpaperService.redditWallpaperCredit).thenReturn(null);
   return wallpaperService;
 }
+
+/// A valid 1×1 PNG in a new buffer each call.
+Uint8List _onePixelPng() => Uint8List.fromList([
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, //
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, //
+      0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, //
+      0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, //
+      0x42, 0x60, 0x82, //
+    ]);
 
 /// An app's launcher icon (from [AppsService.getAppIcon]) under the grayscale filter, inside the
 /// top bar shortcut for [packageName].
