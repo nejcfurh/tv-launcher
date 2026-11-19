@@ -162,6 +162,12 @@ public class MainActivity extends FlutterActivity {
             } catch (Exception e) {
                 temp.delete();
                 return;
+            } finally {
+                // A full frame is about 8 MB of native memory; free it now instead of at the next GC.
+                if (scaled != frame) {
+                    scaled.recycle();
+                }
+                frame.recycle();
             }
             temp.renameTo(target);
         }, "home-snapshot").start();

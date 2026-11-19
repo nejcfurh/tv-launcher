@@ -438,6 +438,7 @@ class WatchNextService extends ChangeNotifier {
     const height = 360.0;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, width, height));
+    ui.Image? iconImage;
 
     // Background gradient (rich cinematic dark palette)
     final bgPaint = Paint()
@@ -471,7 +472,8 @@ class WatchNextService extends ChangeNotifier {
         if (iconBytes.isNotEmpty) {
           final codec = await ui.instantiateImageCodec(iconBytes);
           final frame = await codec.getNextFrame();
-          final iconImage = frame.image;
+          codec.dispose();
+          iconImage = frame.image;
 
           const iconSize = 76.0;
           const iconLeft = (width - iconSize) / 2;
@@ -544,10 +546,20 @@ class WatchNextService extends ChangeNotifier {
       ..strokeWidth = 1.0;
     canvas.drawRect(const Rect.fromLTWH(0.5, 0.5, width - 1, height - 1), borderPaint);
 
+    titlePainter.dispose();
+
+    // Native image memory is freed here rather than whenever the garbage collector runs.
     final picture = recorder.endRecording();
-    final image = await picture.toImage(width.toInt(), height.toInt());
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return byteData?.buffer.asUint8List();
+    ui.Image? image;
+    try {
+      image = await picture.toImage(width.toInt(), height.toInt());
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      return byteData?.buffer.asUint8List();
+    } finally {
+      image?.dispose();
+      picture.dispose();
+      iconImage?.dispose();
+    }
   }
 
   void _schedulePosterCacheNotification() {
