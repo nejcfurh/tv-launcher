@@ -6,8 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('the GPU cache holds four 1080p screens, and never less than the floor', () {
-    expect(gpuResourceCacheBytes(const Size(1920, 1080)), 1920 * 1080 * 4 * 4);
+  test('the GPU cache holds six 1080p screens, and never less than the floor', () {
+    expect(gpuResourceCacheBytes(const Size(1920, 1080)), 1920 * 1080 * 4 * 6);
     expect(gpuResourceCacheBytes(Size.zero), kGpuResourceCacheMinBytes);
   });
 
@@ -29,7 +29,7 @@ void main() {
 
     expect(PaintingBinding.instance.imageCache.maximumSizeBytes, kImageCacheMaxBytes);
     expect(calls.single.method, 'Skia.setResourceCacheMaxBytes');
-    expect(calls.single.arguments, 1920 * 1080 * 4 * 4);
+    expect(calls.single.arguments, 1920 * 1080 * 4 * 6);
   });
 
   test('an engine that rejects the GPU cache setting still gets the image cache cap', () async {

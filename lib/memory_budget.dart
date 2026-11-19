@@ -28,8 +28,10 @@ import 'package:flutter/services.dart';
 const int kImageCacheMaxBytes = 30 << 20;
 
 /// GPU resource cache, in full screens of RGBA pixels. Flutter's default is 12 screens (about
-/// 100 MB at 1920x1080), sized for phones; the home screen draws a handful of full-screen layers.
-const int kGpuResourceCacheScreens = 4;
+/// 100 MB at 1920x1080). A hero switch keeps two baked backdrops (about 2.5 screens) and draws
+/// full-screen fade layers on top; below that working set Skia frees and re-creates the layers on
+/// every frame of the switch. The engine already empties this cache when the launcher is hidden.
+const int kGpuResourceCacheScreens = 6;
 
 /// Smallest GPU resource cache, for a screen size that is not known yet.
 const int kGpuResourceCacheMinBytes = 24 << 20;
