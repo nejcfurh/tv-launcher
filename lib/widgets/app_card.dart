@@ -122,6 +122,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
 
   (AppImageType, ImageProvider)? _loadedImage;
   bool _imageLoadError = false;
+  bool _darkDockArt = false;
 
   late final AnimationController _animation;
 
@@ -275,7 +276,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                                 _loadingCover(),
                                 if (_moving) ..._arrows(),
                                 if (dock)
-                                  DockTileInnerBorder(tileRadius: cornerRadius)
+                                  DockTileInnerBorder(tileRadius: cornerRadius, dark: _darkDockArt)
                                 else
                                   IgnorePointer(
                                     child: AnimatedOpacity(
@@ -357,9 +358,13 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
       if (mounted) {
         await precacheImage(image, context).timeout(const Duration(seconds: 2), onTimeout: () {});
       }
+      final dark = widget.dockTile && mounted
+          ? await isDarkTileImage(image, createLocalImageConfiguration(context)) ?? false
+          : false;
       if (mounted) {
         setState(() {
           _loadedImage = (type, image);
+          _darkDockArt = dark;
         });
       }
     } catch (_) {
