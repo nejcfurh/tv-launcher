@@ -129,6 +129,9 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
   static const double _focusedScale = 1.07;
   static const Duration _focusAnimationDuration = Duration(milliseconds: 180);
 
+  /// Odd, so the last run ends bright; 3 × 1.2 s.
+  static const int _highlightPulseRuns = 3;
+
   @override
   void initState() {
     super.initState();
@@ -510,7 +513,11 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
     }
     _isHighlightAnimating = shouldAnimate;
     if (shouldAnimate) {
-      _animation.repeat(reverse: true);
+      // A few pulses, then a steady outline: a pulse left running keeps the renderer busy for as
+      // long as the tile has focus (upstream arclauncher #98 measured 45% of a core).
+      _animation.repeat(reverse: true, count: _highlightPulseRuns).then((_) {
+        if (mounted && _isHighlightAnimating) _animation.value = 1.0;
+      }, onError: (_) {});
     } else {
       _animation.stop();
     }
