@@ -23,6 +23,7 @@ import 'dart:typed_data';
 import 'package:flauncher/build_flags.dart';
 import 'package:flauncher/database.dart';
 import 'package:flauncher/flauncher.dart';
+import 'package:flauncher/widgets/home_idle_dimmer.dart';
 import 'package:flauncher/flauncher_channel.dart';
 import 'package:flauncher/gradients.dart';
 import 'package:flauncher/models/watch_next_item.dart';
@@ -631,6 +632,25 @@ void main() {
 
     expect(find.byKey(const Key("wallpaper_scrim")), findsOneWidget);
     expect(tester.getSize(find.byKey(const Key("wallpaper_scrim"))), tester.view.physicalSize / tester.view.devicePixelRatio);
+  });
+
+  testWidgets("Home dims its UI and darkens the backdrop after three minutes without a key", (tester) async {
+    final appsService = mkAppService();
+    when(appsService.categoriesWithApps).thenReturn([]);
+
+    await _pumpWidgetWith(tester, appsService);
+    double opacity(String key) => tester.widget<AnimatedOpacity>(find.byKey(Key(key))).opacity;
+    expect(opacity("home_idle_foreground"), 1);
+    expect(opacity("home_idle_backdrop_dim"), 0);
+
+    await tester.pump(kHomeIdleTimeout + const Duration(milliseconds: 100));
+    expect(opacity("home_idle_foreground"), 0);
+    expect(opacity("home_idle_backdrop_dim"), kHomeIdleBackdropDim);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(opacity("home_idle_foreground"), 1);
+    expect(opacity("home_idle_backdrop_dim"), 0);
   });
 
   testWidgets("Default build credits the Unsplash photographer", (tester) async {
