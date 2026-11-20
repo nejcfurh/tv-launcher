@@ -69,9 +69,24 @@ class WatchNextService extends ChangeNotifier {
   final Map<String, Uint8List> _posterCache = {};
   final Set<String> _loadingPosters = {};
   final Set<String> _failedPosters = {};
+  /// Pictures that could not be reached, typically right after a cold boot before Wi-Fi is up.
+  /// They are not marked failed, so the hero keeps the wallpaper instead of a placeholder poster,
+  /// and they are downloaded again after [posterRetryDelays].
+  final Set<String> _unreachablePosters = {};
+  int _posterRetryAttempt = 0;
   Timer? _refreshTimer;
   Timer? _posterNotifyDebounce;
+  Timer? _posterRetryTimer;
   static const int _maxParallelPosterLoads = 2;
+
+  /// Waits before downloading unreachable pictures again; the last one repeats.
+  static const posterRetryDelays = [
+    Duration(seconds: 2),
+    Duration(seconds: 4),
+    Duration(seconds: 8),
+    Duration(seconds: 15),
+    Duration(seconds: 30),
+  ];
 
   List<WatchNextItem> get items => _items;
   bool get isLoading => _isLoading;
@@ -190,6 +205,7 @@ class WatchNextService extends ChangeNotifier {
     _settingsService?.removeListener(_onSettingsChanged);
     _refreshTimer?.cancel();
     _posterNotifyDebounce?.cancel();
+    _posterRetryTimer?.cancel();
     super.dispose();
   }
 
@@ -374,6 +390,7 @@ class WatchNextService extends ChangeNotifier {
       if (imageBytes != null && imageBytes.isNotEmpty) {
         _posterCache[uri] = imageBytes;
         _failedPosters.remove(uri);
+        _posterRetryAttempt = 0;
         _schedulePosterCacheNotification();
       } else {
         _failedPosters.add(uri);
@@ -384,6 +401,8 @@ class WatchNextService extends ChangeNotifier {
           _schedulePosterCacheNotification();
         }
       }
+    } on _PosterUnreachable {
+      _schedulePosterRetry(uri);
     } catch (_) {
       _failedPosters.add(uri);
       if (_settingsService?.watchNextHideProgramsWithoutImages ?? false) {
@@ -397,12 +416,32 @@ class WatchNextService extends ChangeNotifier {
     }
   }
 
+  /// The picture at [uri], or null when the server answers without it. Throws [_PosterUnreachable]
+  /// when no answer comes: no network, a failed name lookup, a timeout.
   Future<Uint8List?> _download(Uri uri) async {
+    final http.Response response;
     try {
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
-      return response.statusCode == 200 ? response.bodyBytes : null;
-    } catch (_) {
-      return null;
+      response = await http.get(uri).timeout(const Duration(seconds: 10));
+    } on Exception {
+      throw const _PosterUnreachable();
+    }
+    return response.statusCode == 200 ? response.bodyBytes : null;
+  }
+
+  void _schedulePosterRetry(String uri) {
+    _unreachablePosters.add(uri);
+    if (_posterRetryTimer?.isActive ?? false) return;
+    final delay = posterRetryDelays[_posterRetryAttempt.clamp(0, posterRetryDelays.length - 1)];
+    _posterRetryAttempt++;
+    _posterRetryTimer = Timer(delay, _retryUnreachablePosters);
+  }
+
+  void _retryUnreachablePosters() {
+    final shown = _items.map(getPosterUriForItem).toSet();
+    final uris = _unreachablePosters.where(shown.contains).toList(growable: false);
+    _unreachablePosters.clear();
+    for (final uri in uris) {
+      unawaited(_loadPosterImage(uri));
     }
   }
 
@@ -594,4 +633,9 @@ class WatchNextService extends ChangeNotifier {
       item.intentUri,
     );
   }
+}
+
+/// A picture download that got no answer from the server.
+class _PosterUnreachable implements Exception {
+  const _PosterUnreachable();
 }

@@ -208,6 +208,83 @@ void main() {
     });
   });
 
+  group('unreachable pictures', () {
+    const uri = 'https://occ-0-3375-1489.1.nflxso.net/dnm/api/v6/a.jpg';
+
+    /// Runs [body] with a network that fails until [online] is set, counting the requests.
+    Future<void> withNetwork(
+      WidgetTester tester,
+      Future<void> Function(WatchNextService service, List<String> requested, void Function() goOnline) body,
+    ) async {
+      final requested = <String>[];
+      var online = false;
+      await http.runWithClient(
+        () async {
+          final service = await _serviceWithItems(tester, posterUri: (_) => uri);
+          await tester.pump();
+          await body(service, requested, () => online = true);
+          service.dispose();
+        },
+        () => MockClient((request) async {
+          requested.add(request.url.toString());
+          if (!online) throw http.ClientException('Failed host lookup', request.url);
+          return http.Response.bytes([4, 2], 200);
+        }),
+      );
+    }
+
+    testWidgets('keep the item on its picture, not a placeholder, while the network is down', (tester) async {
+      await withNetwork(tester, (service, requested, _) async {
+        final item = service.items.first;
+
+        expect(requested, [uri]);
+        expect(service.getPosterUriForItem(item), uri);
+        expect(service.getCachedPoster(uri), isNull);
+        expect(service.hasPosterLoadFailed(uri), isFalse);
+        expect(service.itemHasImage(item), isTrue);
+      });
+    });
+
+    testWidgets('are downloaded again until the network is back', (tester) async {
+      await withNetwork(tester, (service, requested, goOnline) async {
+        await tester.pump(WatchNextService.posterRetryDelays[0] - const Duration(milliseconds: 1));
+        expect(requested, hasLength(1));
+
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(requested, hasLength(2));
+
+        goOnline();
+        await tester.pump(WatchNextService.posterRetryDelays[1]);
+        expect(requested, hasLength(3));
+        expect(service.getCachedPoster(uri), [4, 2]);
+
+        await tester.pump(const Duration(minutes: 1));
+        expect(requested, hasLength(3));
+      });
+    });
+
+    testWidgets('a picture the server refuses still gets the placeholder', (tester) async {
+      final requested = <String>[];
+      await http.runWithClient(
+        () async {
+          final service = await _serviceWithItems(tester, posterUri: (_) => uri);
+          await tester.pump();
+
+          expect(service.hasPosterLoadFailed(uri), isTrue);
+          expect(service.getPosterUriForItem(service.items.first), 'placeholder://1');
+
+          await tester.pump(const Duration(minutes: 1));
+          expect(requested, [uri]);
+          service.dispose();
+        },
+        () => MockClient((request) async {
+          requested.add(request.url.toString());
+          return http.Response('', 404);
+        }),
+      );
+    });
+  });
+
   group('placeholder poster', () {
     Future<Uint8List> pngOf(int size) async {
       final recorder = ui.PictureRecorder();
