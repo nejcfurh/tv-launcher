@@ -765,7 +765,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
         child: IgnorePointer(
           child: CustomPaint(
             key: Key("wallpaper_scrim"),
-            painter: _CinematicScrimPainter(leftScrim: false),
+            painter: CinematicScrimPainter(leftScrim: false),
           ),
         ),
       ),
@@ -1096,7 +1096,7 @@ class _HeroBackdropBaker extends ChangeNotifier {
       fit: BoxFit.cover,
       alignment: Alignment.topCenter,
     );
-    const _CinematicScrimPainter().paint(heroCanvas, pxSize);
+    const CinematicScrimPainter(dim: true).paint(heroCanvas, pxSize);
     final heroPicture = heroRecorder.endRecording();
     final heroImage = heroPicture.toImageSync(pxSize.width.toInt(), pxSize.height.toInt());
     heroPicture.dispose();
@@ -1127,7 +1127,7 @@ class _HeroBackdropBaker extends ChangeNotifier {
       filterQuality: FilterQuality.low,
     );
     // Blur the scrimmed hero (what is actually on screen), otherwise the blur looks much brighter.
-    const _CinematicScrimPainter().paint(gridCanvas, blurRect.size);
+    const CinematicScrimPainter(dim: true).paint(gridCanvas, blurRect.size);
     gridCanvas.restore();
     final gridPicture = gridRecorder.endRecording();
     final gridImage = gridPicture.toImageSync(pxWidth, pxHeight);
@@ -1159,15 +1159,23 @@ class _HeroBackdropBaker extends ChangeNotifier {
 }
 
 /// Scrims over the home background. The left one only goes behind the hero text; top and bottom
-/// keep the top bar and the dock readable on any picture.
-class _CinematicScrimPainter extends CustomPainter {
+/// keep the top bar and the dock readable on any picture, and a soft dark patch sits behind the
+/// date and time. [dim] darkens a Watch Next picture as a whole: bright, flat areas show the
+/// panel's dimming zones, and the logo many services bake into the lower third competes with the
+/// hero text.
+@visibleForTesting
+class CinematicScrimPainter extends CustomPainter {
   final bool leftScrim;
+  final bool dim;
 
-  const _CinematicScrimPainter({this.leftScrim = true});
+  const CinematicScrimPainter({this.leftScrim = true, this.dim = false});
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
+    if (dim) {
+      canvas.drawRect(rect, Paint()..color = const Color(0x33000000)); // 20%
+    }
     if (leftScrim) {
       canvas.drawRect(
         rect,
@@ -1180,15 +1188,16 @@ class _CinematicScrimPainter extends CustomPainter {
           ),
       );
     }
-    // Bottom: 50% black at the bottom edge, gone at 35% of the height measured from the bottom.
+    // Bottom: 70% black at the bottom edge, 50% at 30% of the height, gone at 55% (just below
+    // the hero title), so a logo baked into the lower third of the picture recedes.
     canvas.drawRect(
       rect,
       Paint()
         ..shader = ui.Gradient.linear(
           Offset(0, size.height),
           Offset.zero,
-          const [Color(0x80000000), Colors.transparent],
-          const [0.0, 0.35],
+          const [Color(0xB3000000), Color(0x80000000), Colors.transparent],
+          const [0.0, 0.3, 0.55],
         ),
     );
     // Top: 45% black at the top edge, gone at 15% of the height.
@@ -1202,9 +1211,20 @@ class _CinematicScrimPainter extends CustomPainter {
           const [0.0, 0.15],
         ),
     );
+    // Behind the date and time (right end of the top bar): 40% black, gone 20% of the width away.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          Offset(size.width * 0.86, size.height * 0.05),
+          size.width * 0.2,
+          const [Color(0x66000000), Colors.transparent],
+        ),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _CinematicScrimPainter oldDelegate) => oldDelegate.leftScrim != leftScrim;
+  bool shouldRepaint(covariant CinematicScrimPainter oldDelegate) =>
+      oldDelegate.leftScrim != leftScrim || oldDelegate.dim != dim;
 }
 
