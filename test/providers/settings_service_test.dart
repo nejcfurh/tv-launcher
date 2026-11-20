@@ -126,6 +126,36 @@ void main() async {
     });
   });
 
+  group("date format from before the redesign", () {
+    test("a saved format is switched to the redesign format once", () async {
+      await sharedPreferences.setString("date_format", "EEEE, dd.MM.yyyy");
+
+      final service = SettingsService(sharedPreferences);
+
+      expect(service.dateFormat, SettingsService.defaultDateFormat);
+    });
+
+    test("a format picked after the switch is kept", () async {
+      await sharedPreferences.setString("date_format", "EEEE, dd.MM.yyyy");
+      final first = SettingsService(sharedPreferences);
+      await first.setDateTimeFormat("EEEE d", first.timeFormat);
+
+      final restarted = SettingsService(sharedPreferences);
+
+      expect(restarted.dateFormat, "EEEE d");
+    });
+
+    test("a fresh install keeps the default and never switches later", () async {
+      final first = SettingsService(sharedPreferences);
+      expect(first.dateFormat, SettingsService.defaultDateFormat);
+      await first.setDateTimeFormat("dd.MM.", first.timeFormat);
+
+      final restarted = SettingsService(sharedPreferences);
+
+      expect(restarted.dateFormat, "dd.MM.");
+    });
+  });
+
   group("getDateFormat", ()  {
     test("with default", () async {
       expect(settingsService.dateFormat, SettingsService.defaultDateFormat);
