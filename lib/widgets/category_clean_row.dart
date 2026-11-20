@@ -60,6 +60,9 @@ class CategoryCleanRow extends StatelessWidget
   final double scrollAlignment;
   final VoidCallback? onAppFocused;
 
+  /// Called with the app whose tile got focus (after [onAppFocused]); not for the "All apps" tile.
+  final void Function(App app)? onDockAppFocused;
+
   /// Shows the "All apps" tile at the end of the row when set.
   final VoidCallback? onAllAppsPressed;
   final FocusNode? allAppsFocusNode;
@@ -71,6 +74,7 @@ class CategoryCleanRow extends StatelessWidget
     this.isFirstSection = false,
     this.scrollAlignment = 0.5,
     this.onAppFocused,
+    this.onDockAppFocused,
     this.onAllAppsPressed,
     this.allAppsFocusNode,
   }) : super(key: key);
@@ -107,7 +111,12 @@ class CategoryCleanRow extends StatelessWidget
                       scrollAlignment: scrollAlignment,
                       enforceAspectRatio: false,
                       dockTile: true,
-                      onFocused: onAppFocused,
+                      onFocused: onAppFocused == null && onDockAppFocused == null
+                          ? null
+                          : () {
+                              onAppFocused?.call();
+                              onDockAppFocused?.call(application);
+                            },
                       onMove: (direction) => _onMove(context, direction, index),
                       onMoveEnd: () => _onMoveEnd(context),
                     ),

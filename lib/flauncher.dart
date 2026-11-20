@@ -60,6 +60,9 @@ const _kDockBottomMargin = 0.0;
 
 const _kDockTrayPadding = 16.0;
 
+/// How long focus rests on a dock tile before the hero switches to that app's item.
+const kDockHeroFollowDelay = Duration(milliseconds: 350);
+
 class FLauncher extends StatefulWidget {
   const FLauncher({super.key});
 
@@ -73,6 +76,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
   int _homePressGeneration = 0;
   final GlobalKey _dockKey = GlobalKey();
   final GlobalKey<HomeIdleDimmerState> _idleKey = GlobalKey();
+  Timer? _dockHeroTimer;
   final FocusNode _allAppsFocusNode = FocusNode(debugLabel: "dock_all_apps");
   int _heroIndex = 0;
   int _heroDirection = 1;
@@ -103,6 +107,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
       _watchNextService.heroSwitchGate = null;
     }
     WidgetsBinding.instance.removeObserver(this);
+    _dockHeroTimer?.cancel();
     _allAppsFocusNode.dispose();
     _scrollController.dispose();
     _heroBackdropBaker.dispose();
@@ -335,7 +340,17 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
   }
 
   void _onHomeSectionFocused() {
+    _dockHeroTimer?.cancel();
     _setAppGridFocused(false);
+  }
+
+  /// The hero shows the focused dock app's first Watch Next item once focus has rested on the tile
+  /// for [kDockHeroFollowDelay], so moving across the dock bakes at most one backdrop.
+  void _onDockAppFocused(App app) {
+    _dockHeroTimer?.cancel();
+    _dockHeroTimer = Timer(kDockHeroFollowDelay, () {
+      if (mounted) _watchNextService.showFirstItemFor(app.packageName);
+    });
   }
 
   Widget _tvOSLayout(BuildContext context, AppsService appsService, {required bool showAppNames}) {
@@ -727,6 +742,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
         isFirstSection: handleUpNavigationToSettings,
         scrollAlignment: 1.0,
         onAppFocused: _onHomeSectionFocused,
+        onDockAppFocused: _onDockAppFocused,
         onAllAppsPressed: showAllAppsTile ? _focusFirstGridApp : null,
         allAppsFocusNode: _allAppsFocusNode,
       ),

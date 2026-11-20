@@ -163,6 +163,16 @@ class WatchNextService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Shows the first item from [packageName] in the hero (its dock tile has focus). The hero is
+  /// left as it is when it already shows (or is switching to) an item from that app, or when the
+  /// app has none.
+  void showFirstItemFor(String packageName) {
+    final shownIndex = _requestedHeroIndex ?? _activeHeroIndex;
+    if (shownIndex < _items.length && _items[shownIndex].packageName == packageName) return;
+    final index = _items.indexWhere((item) => item.packageName == packageName);
+    if (index >= 0) setActiveHeroIndex(index);
+  }
+
   void nextHeroItem() {
     if (_items.isEmpty) return;
     final next = ((_requestedHeroIndex ?? _activeHeroIndex) + 1) % _items.length;

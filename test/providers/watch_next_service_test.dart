@@ -16,13 +16,19 @@ import '../mocks.mocks.dart';
 Future<WatchNextService> _serviceWithItems(
   WidgetTester tester, {
   String Function(int id)? posterUri,
+  String? Function(int id)? packageName,
 }) async {
   final channel = MockFLauncherChannel();
   when(channel.checkWatchNextPermission()).thenAnswer((_) async => true);
   when(channel.getWatchNextItems()).thenAnswer(
     (_) async => [
       for (final id in [1, 2, 3])
-        {'id': id, 'title': 'Item $id', 'posterUri': posterUri?.call(id) ?? 'content://poster/$id'},
+        {
+          'id': id,
+          'title': 'Item $id',
+          'posterUri': posterUri?.call(id) ?? 'content://poster/$id',
+          if (packageName?.call(id) != null) 'packageName': packageName!(id),
+        },
     ],
   );
   when(channel.loadContentUriImage(any)).thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
@@ -33,6 +39,53 @@ Future<WatchNextService> _serviceWithItems(
 }
 
 void main() {
+  group('hero follows the focused dock app', () {
+    // Item 1 is YouTube, items 2 and 3 are Netflix.
+    String package(int id) => id == 1 ? 'com.google.android.youtube.tv' : 'com.netflix.ninja';
+
+    testWidgets("shows the app's first item", (tester) async {
+      final service = await _serviceWithItems(tester, packageName: package);
+
+      service.showFirstItemFor('com.netflix.ninja');
+
+      expect(service.activeHeroItem?.id, 2);
+      service.dispose();
+    });
+
+    testWidgets('keeps the hero when it already shows an item from that app', (tester) async {
+      final service = await _serviceWithItems(tester, packageName: package);
+      service.setActiveHeroIndex(2); // item 3, Netflix
+
+      service.showFirstItemFor('com.netflix.ninja');
+
+      expect(service.activeHeroItem?.id, 3);
+      service.dispose();
+    });
+
+    testWidgets('keeps the hero for an app without an item', (tester) async {
+      final service = await _serviceWithItems(tester, packageName: package);
+      service.setActiveHeroIndex(1);
+
+      service.showFirstItemFor('com.playstation.hdmi');
+
+      expect(service.activeHeroItem?.id, 2);
+      service.dispose();
+    });
+
+    testWidgets('goes through the switch gate like any other change', (tester) async {
+      final service = await _serviceWithItems(tester, packageName: package);
+      final gated = <int>[];
+      service.heroSwitchGate = (item) async => gated.add(item.id);
+
+      service.showFirstItemFor('com.netflix.ninja');
+      await tester.pump();
+
+      expect(gated, [2]);
+      expect(service.activeHeroItem?.id, 2);
+      service.dispose();
+    });
+  });
+
   group('hero switch gate', () {
     testWidgets('without a gate the hero changes at once', (tester) async {
       final service = await _serviceWithItems(tester);

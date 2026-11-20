@@ -419,6 +419,34 @@ void main() {
     expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
   });
 
+  testWidgets("The hero follows the dock tile that focus rests on, not every tile it passes", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = [
+      fakeApp(packageName: "com.playstation.hdmi", name: "PS5", version: "1.0.0"),
+      fakeApp(packageName: "com.netflix.ninja", name: "Netflix", version: "1.0.0"),
+      fakeApp(packageName: "com.google.android.youtube.tv", name: "YouTube", version: "1.0.0"),
+    ];
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+    final watchNextService = mkWatchNextService();
+
+    await _pumpWidgetWithProviders(tester, mkWallpaperService(), appsService, mkSettingsService(), watchNextService);
+    await tester.pumpAndSettle();
+    await tester.pump(kDockHeroFollowDelay * 2);
+    clearInteractions(watchNextService);
+
+    // Across Netflix to YouTube, faster than the delay.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(kDockHeroFollowDelay - const Duration(milliseconds: 50));
+    verifyNever(watchNextService.showFirstItemFor("com.google.android.youtube.tv"));
+
+    await tester.pump(const Duration(milliseconds: 100));
+    verify(watchNextService.showFirstItemFor("com.google.android.youtube.tv")).called(1);
+    verifyNever(watchNextService.showFirstItemFor("com.netflix.ninja"));
+  });
+
   testWidgets("Dock tiles decode their picture at the size they are shown, grid tiles at 480 px", (tester) async {
     final appsService = mkAppService();
     when((appsService as MockAppsService).getAppBanner(any)).thenAnswer((_) async => Uint8List(0));
