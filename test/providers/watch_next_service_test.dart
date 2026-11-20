@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flauncher/models/watch_next_item.dart';
 import 'package:flauncher/providers/watch_next_service.dart';
@@ -203,6 +204,51 @@ void main() {
 
       expect(requested, [larger, published]);
       expect(service.getCachedPoster(published), [6, 0, 0]);
+      service.dispose();
+    });
+  });
+
+  group('placeholder poster', () {
+    Future<Uint8List> pngOf(int size) async {
+      final recorder = ui.PictureRecorder();
+      ui.Canvas(recorder).drawColor(const ui.Color(0xFF3366CC), ui.BlendMode.src);
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(size, size);
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      image.dispose();
+      picture.dispose();
+      return bytes!.buffer.asUint8List();
+    }
+
+    testWidgets('renders a PNG for items without artwork, with and without an app icon', (tester) async {
+      const pngSignature = [0x89, 0x50, 0x4E, 0x47];
+      late WatchNextService service;
+      await tester.runAsync(() async {
+        final icon = await pngOf(48);
+        final channel = MockFLauncherChannel();
+        when(channel.checkWatchNextPermission()).thenAnswer((_) async => true);
+        when(channel.getWatchNextItems()).thenAnswer(
+          (_) async => [
+            {'id': 1, 'title': 'With icon', 'packageName': 'app.with.icon'},
+            {'id': 2, 'title': 'Without icon', 'packageName': 'app.without.icon'},
+          ],
+        );
+        when(channel.getApplicationIcon('app.with.icon')).thenAnswer((_) async => icon);
+        when(channel.getApplicationIcon('app.without.icon')).thenAnswer((_) async => Uint8List(0));
+        service = WatchNextService(channel);
+        final deadline = DateTime.now().add(const Duration(seconds: 10));
+        while ((service.getCachedPoster('placeholder://1') == null ||
+                service.getCachedPoster('placeholder://2') == null) &&
+            DateTime.now().isBefore(deadline)) {
+          service.ensurePosterLoaded('placeholder://1');
+          service.ensurePosterLoaded('placeholder://2');
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      });
+
+      expect(service.getCachedPoster('placeholder://1')?.take(4), pngSignature);
+      expect(service.getCachedPoster('placeholder://2')?.take(4), pngSignature);
+      expect(service.getCachedPoster('placeholder://1'), isNot(service.getCachedPoster('placeholder://2')));
       service.dispose();
     });
   });

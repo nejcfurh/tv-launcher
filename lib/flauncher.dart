@@ -965,6 +965,13 @@ class _HeroBackdropBaker extends ChangeNotifier {
       });
       return;
     }
+    // Baked, or being baked, for an item that is not the one shown now (the switch went elsewhere
+    // or stopped waiting).
+    _dropPrepared();
+    final preparing = _preparing;
+    if (preparing != null && !identical(preparing.bytes, bytes)) {
+      _preparing = null;
+    }
 
     if (!_baking) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -996,14 +1003,26 @@ class _HeroBackdropBaker extends ChangeNotifier {
         return;
       }
       _preparing = null;
-      final old = _prepared;
+      // The item may already be shown, baked the regular way after the switch stopped waiting.
+      if (identical(bytes, _requestedBytes)) {
+        textures.dispose();
+        return;
+      }
+      _dropPrepared();
       _prepared = textures;
-      if (old != null) _scheduleDispose(old);
     }
 
     final done = run();
     _preparing = (bytes: bytes, done: done);
     return done;
+  }
+
+  void _dropPrepared() {
+    final prepared = _prepared;
+    if (prepared != null) {
+      _prepared = null;
+      _scheduleDispose(prepared);
+    }
   }
 
   void _setCurrent(_HeroBackdropTextures textures) {
