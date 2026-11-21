@@ -42,6 +42,7 @@ import 'package:flauncher/widgets/watch_next_hero.dart';
 import 'package:flauncher/widgets/watch_next_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flauncher/widgets/home_idle_dimmer.dart';
 import 'package:provider/provider.dart';
 import 'package:flauncher/l10n/app_localizations.dart';
 
@@ -59,6 +60,9 @@ const _kDockBottomMargin = 0.0;
 
 const _kDockTrayPadding = 16.0;
 
+/// How long focus rests on a dock tile before the hero switches to that app's item.
+const kDockHeroFollowDelay = Duration(milliseconds: 350);
+
 class FLauncher extends StatefulWidget {
   const FLauncher({super.key});
 
@@ -71,6 +75,8 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   int _homePressGeneration = 0;
   final GlobalKey _dockKey = GlobalKey();
+  final GlobalKey<HomeIdleDimmerState> _idleKey = GlobalKey();
+  Timer? _dockHeroTimer;
   final FocusNode _allAppsFocusNode = FocusNode(debugLabel: "dock_all_apps");
   int _heroIndex = 0;
   int _heroDirection = 1;
@@ -101,6 +107,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
       _watchNextService.heroSwitchGate = null;
     }
     WidgetsBinding.instance.removeObserver(this);
+    _dockHeroTimer?.cancel();
     _allAppsFocusNode.dispose();
     _scrollController.dispose();
     _heroBackdropBaker.dispose();
@@ -134,170 +141,191 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     },
     child: FocusTraversalGroup(
       policy: RowByRowTraversalPolicy(),
-      child: Stack(
-        children: [
-          RepaintBoundary(
-            child: Consumer3<WallpaperService, SettingsService, WatchNextService>(
-              builder: (_, wallpaperService, settingsService, watchNextService, __) {
-                final author = wallpaperService.slideshowAuthor;
-                final redditCredit = wallpaperService.redditWallpaperCredit;
-                final isBigPicture = settingsService.showWatchNextSection && settingsService.watchNextBigPictureMode;
-                final activeItem = isBigPicture ? watchNextService.activeHeroItem : null;
-                final heroUri = isBigPicture ? watchNextService.getPosterUriForItem(activeItem) : null;
-                final heroBytes = isBigPicture ? watchNextService.getCachedPoster(heroUri) : null;
-                final hasHeroBackdrop = isBigPicture && heroBytes != null;
-                final heroIndex = watchNextService.activeHeroIndex;
-                if (heroIndex != _heroIndex) {
-                  _heroDirection = carouselDirection(_heroIndex, heroIndex, watchNextService.items.length);
-                  _heroIndex = heroIndex;
-                }
-                final screenSize = MediaQuery.sizeOf(context);
-                final dpr = MediaQuery.devicePixelRatioOf(context);
-                _heroBackdropBaker.update(
-                  bytes: hasHeroBackdrop ? heroBytes : null,
-                  size: screenSize,
-                  dpr: dpr,
-                );
-                return Stack(
-                  children: [
-                    // Crossfade between wallpapers (each one has a revision-based key).
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 1500),
-                      child: hasHeroBackdrop
-                          ? const SizedBox.shrink(key: ValueKey('occluded_wallpaper'))
-                          : _scrimmedWallpaper(_wallpaper(context, wallpaperService)),
-                    ),
-                    // Hero items crossfade once baked simultaneously with dock blur.
-                    AnimatedSwitcher(
-                      duration: _kHeroFadeDuration,
-                      child: hasHeroBackdrop
-                          ? RepaintBoundary(
-                              key: const ValueKey('hero_bg'),
-                              child: ListenableBuilder(
-                                listenable: _heroBackdropBaker,
-                                builder: (context, _) {
-                                  final heroImage = _heroBackdropBaker.textures?.hero;
-                                  final Key heroKey = heroImage == null ? const ValueKey('empty_hero') : ObjectKey(heroImage);
-                                  // Slides with the hero text, in the direction the carousel moved.
-                                  return AnimatedSwitcher(
-                                    duration: _kHeroFadeDuration,
-                                    transitionBuilder: (child, animation) => carouselTransition(
-                                      child: child,
-                                      animation: animation,
-                                      incoming: child.key == heroKey,
-                                      direction: _heroDirection,
-                                      distance: 0.03,
-                                      coverEdges: true,
-                                    ),
-                                    child: heroImage == null
-                                        ? SizedBox.expand(key: heroKey)
-                                        : RawImage(
-                                            key: heroKey,
-                                            image: heroImage,
-                                            width: screenSize.width,
-                                            height: screenSize.height,
-                                            fit: BoxFit.fill,
-                                          ),
-                                  );
-                                },
-                              ),
-                            )
-                          : const SizedBox.shrink(key: ValueKey('no_hero_bg')),
-                    ),
-                    if (redditCredit != null && !hasHeroBackdrop)
-                      Positioned(
-                        right: 24,
-                        top: 64,
-                        child: Material(
-                          type: MaterialType.transparency,
-                          child: Text(
-                            redditCredit,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.white70,
-                              shadows: const [Shadow(blurRadius: 4)],
-                            ),
-                          ),
-                        ),
-                      )
-                    else if (author != null && !hasHeroBackdrop && !kHideUnsplashCredit)
-                      Positioned(
-                        right: 24,
-                        top: 64,
-                        // Material gives the text the app font instead of the debug fallback style.
-                        child: Material(
-                          type: MaterialType.transparency,
-                          child: Text(
-                            AppLocalizations.of(context)!.unsplashPhotoCredit(author),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.white70,
-                              shadows: const [Shadow(blurRadius: 4)],
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ),
-          Selector3<LauncherState, SettingsService, WallpaperService, (bool, bool, bool)>(
-            selector: (_, launcherState, settings, wallpaperService) => (
-              launcherState.appGridFocused,
-              settings.backgroundBlurDisabled,
-              wallpaperService.wallpaperVideoFile != null,
-            ),
-            builder: (_, data, __) {
-              final (appGridFocused, blurDisabled, hasVideoWallpaper) = data;
-              return ListenableBuilder(
-                listenable: _heroBackdropBaker,
-                builder: (context, _) {
-                  final gridBlur = _heroBackdropBaker.textures?.gridBlur;
-                  if (blurDisabled || (hasVideoWallpaper && gridBlur == null)) {
-                    return const SizedBox.shrink();
+      child: HomeIdleDimmer(
+        key: _idleKey,
+        canDim: () => mounted && (ModalRoute.of(context)?.isCurrent ?? true),
+        builder: (context, dimmed) => Stack(
+          children: [
+            RepaintBoundary(
+              child: Consumer3<WallpaperService, SettingsService, WatchNextService>(
+                builder: (_, wallpaperService, settingsService, watchNextService, __) {
+                  final author = wallpaperService.slideshowAuthor;
+                  final redditCredit = wallpaperService.redditWallpaperCredit;
+                  final isBigPicture = settingsService.showWatchNextSection && settingsService.watchNextBigPictureMode;
+                  final activeItem = isBigPicture ? watchNextService.activeHeroItem : null;
+                  final heroUri = isBigPicture ? watchNextService.getPosterUriForItem(activeItem) : null;
+                  final heroBytes = isBigPicture ? watchNextService.getCachedPoster(heroUri) : null;
+                  final hasHeroBackdrop = isBigPicture && heroBytes != null;
+                  final heroIndex = watchNextService.activeHeroIndex;
+                  if (heroIndex != _heroIndex) {
+                    _heroDirection = carouselDirection(_heroIndex, heroIndex, watchNextService.items.length);
+                    _heroIndex = heroIndex;
                   }
-                  return Positioned.fill(
-                    child: IgnorePointer(
-                      child: AnimatedOpacity(
-                        opacity: appGridFocused && !blurDisabled ? 1 : 0,
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeInOut,
-                        child: CachedBlurLayer(
-                          sigma: 10,
-                          prebakedBlur: gridBlur,
-                          hidden: !appGridFocused || blurDisabled,
-                        ),
-                      ),
-                    ),
+                  final screenSize = MediaQuery.sizeOf(context);
+                  final dpr = MediaQuery.devicePixelRatioOf(context);
+                  _heroBackdropBaker.update(
+                    bytes: hasHeroBackdrop ? heroBytes : null,
+                    size: screenSize,
+                    dpr: dpr,
                   );
-                },
-              );
-            },
-          ),
-          Consumer<LauncherState>(
-            builder:
-                (_, state, child) => Visibility(
-                  replacement: const Center(child: AlternativeLauncherView()),
-                  visible: state.launcherVisible,
-                  child: child!,
-                ),
-            child: Scaffold(
-              backgroundColor: Colors.transparent,
-              appBar: FocusAwareAppBar(key: _appBarKey),
-              // (initialized (data.$1), layoutVersion (data.$2), showAppNamesBelowIcons (data.$3))
-              body: Selector2<AppsService, SettingsService, (bool, int, bool)>(
-                selector: (_, appsService, settingsService) =>
-                    (appsService.initialized, appsService.layoutVersion, settingsService.showAppNamesBelowIcons),
-                builder: (context, data, _) {
-                  if (data.$1) {
-                    return _tvOSLayout(context, context.read<AppsService>(), showAppNames: data.$3);
-                  } else {
-                    return _emptyState(context);
-                  }
+                  return Stack(
+                    children: [
+                      // Crossfade between wallpapers (each one has a revision-based key).
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 1500),
+                        child: hasHeroBackdrop
+                            ? const SizedBox.shrink(key: ValueKey('occluded_wallpaper'))
+                            : _scrimmedWallpaper(_wallpaper(context, wallpaperService)),
+                      ),
+                      // Hero items crossfade once baked simultaneously with dock blur.
+                      AnimatedSwitcher(
+                        duration: _kHeroFadeDuration,
+                        child: hasHeroBackdrop
+                            ? RepaintBoundary(
+                                key: const ValueKey('hero_bg'),
+                                child: ListenableBuilder(
+                                  listenable: _heroBackdropBaker,
+                                  builder: (context, _) {
+                                    final heroImage = _heroBackdropBaker.textures?.hero;
+                                    final Key heroKey = heroImage == null ? const ValueKey('empty_hero') : ObjectKey(heroImage);
+                                    // Slides with the hero text, in the direction the carousel moved.
+                                    return AnimatedSwitcher(
+                                      duration: _kHeroFadeDuration,
+                                      transitionBuilder: (child, animation) => carouselTransition(
+                                        child: child,
+                                        animation: animation,
+                                        incoming: child.key == heroKey,
+                                        direction: _heroDirection,
+                                        distance: 0.03,
+                                        coverEdges: true,
+                                      ),
+                                      child: heroImage == null
+                                          ? SizedBox.expand(key: heroKey)
+                                          : RawImage(
+                                              key: heroKey,
+                                              image: heroImage,
+                                              width: screenSize.width,
+                                              height: screenSize.height,
+                                              fit: BoxFit.fill,
+                                            ),
+                                    );
+                                  },
+                                ),
+                              )
+                            : const SizedBox.shrink(key: ValueKey('no_hero_bg')),
+                      ),
+                      if (redditCredit != null && !hasHeroBackdrop)
+                        Positioned(
+                          right: 24,
+                          top: 64,
+                          child: Material(
+                            type: MaterialType.transparency,
+                            child: Text(
+                              redditCredit,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.white70,
+                                shadows: const [Shadow(blurRadius: 4)],
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (author != null && !hasHeroBackdrop && !kHideUnsplashCredit)
+                        Positioned(
+                          right: 24,
+                          top: 64,
+                          // Material gives the text the app font instead of the debug fallback style.
+                          child: Material(
+                            type: MaterialType.transparency,
+                            child: Text(
+                              AppLocalizations.of(context)!.unsplashPhotoCredit(author),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.white70,
+                                shadows: const [Shadow(blurRadius: 4)],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
                 },
               ),
             ),
-          ),
-        ],
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  key: const Key('home_idle_backdrop_dim'),
+                  opacity: dimmed ? kHomeIdleBackdropDim : 0,
+                  duration: dimmed ? kHomeIdleDimDuration : kHomeIdleWakeDuration,
+                  curve: Curves.easeInOut,
+                  child: const ColoredBox(color: Colors.black),
+                ),
+              ),
+            ),
+            Selector3<LauncherState, SettingsService, WallpaperService, (bool, bool, bool)>(
+              selector: (_, launcherState, settings, wallpaperService) => (
+                launcherState.appGridFocused,
+                settings.backgroundBlurDisabled,
+                wallpaperService.wallpaperVideoFile != null,
+              ),
+              builder: (_, data, __) {
+                final (appGridFocused, blurDisabled, hasVideoWallpaper) = data;
+                return ListenableBuilder(
+                  listenable: _heroBackdropBaker,
+                  builder: (context, _) {
+                    final gridBlur = _heroBackdropBaker.textures?.gridBlur;
+                    if (blurDisabled || (hasVideoWallpaper && gridBlur == null)) {
+                      return const SizedBox.shrink();
+                    }
+                    return Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedOpacity(
+                          opacity: appGridFocused && !blurDisabled ? 1 : 0,
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeInOut,
+                          child: CachedBlurLayer(
+                            sigma: 10,
+                            prebakedBlur: gridBlur,
+                            hidden: !appGridFocused || blurDisabled,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+            AnimatedOpacity(
+              key: const Key('home_idle_foreground'),
+              opacity: dimmed ? 0 : 1,
+              duration: dimmed ? kHomeIdleDimDuration : kHomeIdleWakeDuration,
+              curve: Curves.easeInOut,
+              child: Consumer<LauncherState>(
+                builder:
+                    (_, state, child) => Visibility(
+                      replacement: const Center(child: AlternativeLauncherView()),
+                      visible: state.launcherVisible,
+                      child: child!,
+                    ),
+                child: Scaffold(
+                  backgroundColor: Colors.transparent,
+                  appBar: FocusAwareAppBar(key: _appBarKey),
+                  // (initialized (data.$1), layoutVersion (data.$2), showAppNamesBelowIcons (data.$3))
+                  body: Selector2<AppsService, SettingsService, (bool, int, bool)>(
+                    selector: (_, appsService, settingsService) =>
+                        (appsService.initialized, appsService.layoutVersion, settingsService.showAppNamesBelowIcons),
+                    builder: (context, data, _) {
+                      if (data.$1) {
+                        return _tvOSLayout(context, context.read<AppsService>(), showAppNames: data.$3);
+                      } else {
+                        return _emptyState(context);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -312,7 +340,17 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
   }
 
   void _onHomeSectionFocused() {
+    _dockHeroTimer?.cancel();
     _setAppGridFocused(false);
+  }
+
+  /// The hero shows the focused dock app's first Watch Next item once focus has rested on the tile
+  /// for [kDockHeroFollowDelay], so moving across the dock bakes at most one backdrop.
+  void _onDockAppFocused(App app) {
+    _dockHeroTimer?.cancel();
+    _dockHeroTimer = Timer(kDockHeroFollowDelay, () {
+      if (mounted) _watchNextService.showFirstItemFor(app.packageName);
+    });
   }
 
   Widget _tvOSLayout(BuildContext context, AppsService appsService, {required bool showAppNames}) {
@@ -558,6 +596,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
 
   Future<void> _onHomePressed() async {
     if (!mounted) return;
+    _idleKey.currentState?.wake();
     // HOME closes everything opened above the home page (SettingsPanel, nested
     // dialogs). They sit in the root navigator; SettingsPanel's own Navigator
     // goes away with its dialog route.
@@ -703,6 +742,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
         isFirstSection: handleUpNavigationToSettings,
         scrollAlignment: 1.0,
         onAppFocused: _onHomeSectionFocused,
+        onDockAppFocused: _onDockAppFocused,
         onAllAppsPressed: showAllAppsTile ? _focusFirstGridApp : null,
         allAppsFocusNode: _allAppsFocusNode,
       ),
@@ -765,7 +805,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
         child: IgnorePointer(
           child: CustomPaint(
             key: Key("wallpaper_scrim"),
-            painter: _CinematicScrimPainter(leftScrim: false),
+            painter: CinematicScrimPainter(leftScrim: false),
           ),
         ),
       ),
@@ -1096,7 +1136,7 @@ class _HeroBackdropBaker extends ChangeNotifier {
       fit: BoxFit.cover,
       alignment: Alignment.topCenter,
     );
-    const _CinematicScrimPainter().paint(heroCanvas, pxSize);
+    const CinematicScrimPainter(dim: true).paint(heroCanvas, pxSize);
     final heroPicture = heroRecorder.endRecording();
     final heroImage = heroPicture.toImageSync(pxSize.width.toInt(), pxSize.height.toInt());
     heroPicture.dispose();
@@ -1127,7 +1167,7 @@ class _HeroBackdropBaker extends ChangeNotifier {
       filterQuality: FilterQuality.low,
     );
     // Blur the scrimmed hero (what is actually on screen), otherwise the blur looks much brighter.
-    const _CinematicScrimPainter().paint(gridCanvas, blurRect.size);
+    const CinematicScrimPainter(dim: true).paint(gridCanvas, blurRect.size);
     gridCanvas.restore();
     final gridPicture = gridRecorder.endRecording();
     final gridImage = gridPicture.toImageSync(pxWidth, pxHeight);
@@ -1159,15 +1199,23 @@ class _HeroBackdropBaker extends ChangeNotifier {
 }
 
 /// Scrims over the home background. The left one only goes behind the hero text; top and bottom
-/// keep the top bar and the dock readable on any picture.
-class _CinematicScrimPainter extends CustomPainter {
+/// keep the top bar and the dock readable on any picture, and a soft dark patch sits behind the
+/// date and time. [dim] darkens a Watch Next picture as a whole: bright, flat areas show the
+/// panel's dimming zones, and the logo many services bake into the lower third competes with the
+/// hero text.
+@visibleForTesting
+class CinematicScrimPainter extends CustomPainter {
   final bool leftScrim;
+  final bool dim;
 
-  const _CinematicScrimPainter({this.leftScrim = true});
+  const CinematicScrimPainter({this.leftScrim = true, this.dim = false});
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
+    if (dim) {
+      canvas.drawRect(rect, Paint()..color = const Color(0x33000000)); // 20%
+    }
     if (leftScrim) {
       canvas.drawRect(
         rect,
@@ -1180,15 +1228,16 @@ class _CinematicScrimPainter extends CustomPainter {
           ),
       );
     }
-    // Bottom: 50% black at the bottom edge, gone at 35% of the height measured from the bottom.
+    // Bottom: 70% black at the bottom edge, 50% at 30% of the height, gone at 55% (just below
+    // the hero title), so a logo baked into the lower third of the picture recedes.
     canvas.drawRect(
       rect,
       Paint()
         ..shader = ui.Gradient.linear(
           Offset(0, size.height),
           Offset.zero,
-          const [Color(0x80000000), Colors.transparent],
-          const [0.0, 0.35],
+          const [Color(0xB3000000), Color(0x80000000), Colors.transparent],
+          const [0.0, 0.3, 0.55],
         ),
     );
     // Top: 45% black at the top edge, gone at 15% of the height.
@@ -1202,9 +1251,20 @@ class _CinematicScrimPainter extends CustomPainter {
           const [0.0, 0.15],
         ),
     );
+    // Behind the date and time (right end of the top bar): 40% black, gone 20% of the width away.
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          Offset(size.width * 0.86, size.height * 0.05),
+          size.width * 0.2,
+          const [Color(0x66000000), Colors.transparent],
+        ),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _CinematicScrimPainter oldDelegate) => oldDelegate.leftScrim != leftScrim;
+  bool shouldRepaint(covariant CinematicScrimPainter oldDelegate) =>
+      oldDelegate.leftScrim != leftScrim || oldDelegate.dim != dim;
 }
 

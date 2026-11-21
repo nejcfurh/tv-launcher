@@ -218,7 +218,7 @@ const TextStyle _kDateTextStyle = TextStyle(
   fontSize: 14,
   fontWeight: FontWeight.w400,
   letterSpacing: 0,
-  color: Color(0xBFFFFFFF), // 75% white
+  color: Color(0xE6FFFFFF), // 90% white
   shadows: _kClockShadows,
 );
 

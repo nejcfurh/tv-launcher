@@ -49,6 +49,9 @@ class TestWatchNextService extends ChangeNotifier implements WatchNextService {
   }
 
   @override
+  void showFirstItemFor(String packageName) {}
+
+  @override
   void nextHeroItem() {
     if (_items.isEmpty) return;
     setActiveHeroIndex((_activeHeroIndex + 1) % _items.length);
