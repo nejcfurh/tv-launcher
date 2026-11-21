@@ -161,11 +161,11 @@ void main() async {
       expect(settingsService.dateFormat, SettingsService.defaultDateFormat);
     });
 
-    test("defaults to the short weekday, day and month, which is a preset", () async {
+    test("defaults to the weekday and the date with slashes, which is a preset", () async {
       await initializeDateFormatting('en');
-      expect(SettingsService.defaultDateFormat, "EEE d MMM");
+      expect(SettingsService.defaultDateFormat, "EEEE, dd/MM/yyyy");
       expect(dateFormatPresets.map((preset) => preset.$1), contains(SettingsService.defaultDateFormat));
-      expect(DateFormat(SettingsService.defaultDateFormat, 'en').format(DateTime(2026, 11, 17)), "Tue 17 Nov");
+      expect(DateFormat(SettingsService.defaultDateFormat, 'en').format(DateTime(2026, 11, 20)), "Friday, 20/11/2026");
     });
 
     test("with value set", () async {

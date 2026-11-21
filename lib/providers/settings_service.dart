@@ -99,7 +99,7 @@ const String ACCENT_COLOR_ROSE = "FF4081";
 const String ACCENT_COLOR_ICE_BLUE = "80D8FF";
 
 class SettingsService extends ChangeNotifier {
-  static final defaultDateFormat = "EEE d MMM";
+  static final defaultDateFormat = "EEEE, dd/MM/yyyy";
   static final defaultTimeFormat = "H:mm";
   final SharedPreferences _sharedPreferences;
 
@@ -205,9 +205,9 @@ class SettingsService extends ChangeNotifier {
     _applyRedesignDateFormatOnce();
   }
 
-  /// The home redesign made [defaultDateFormat] the date format, but a format saved before it
-  /// still won (e.g. "EEEE, dd.MM.yyyy" on the TV). Switch to the new format once; a format
-  /// picked after this keeps.
+  /// A format saved before [defaultDateFormat] became "Friday, 20/11/2026" (e.g. "EEEE, dd.MM.yyyy"
+  /// on the TV) would otherwise keep winning. Switch to the default once; a format picked after
+  /// this is kept.
   void _applyRedesignDateFormatOnce() {
     if (_sharedPreferences.getBool(_dateFormatRedesignApplied) ?? false) return;
     unawaited(_sharedPreferences.setBool(_dateFormatRedesignApplied, true));
