@@ -208,7 +208,7 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
 const kTopBarKeyline = 48.0;
 
 /// Height of the top bar: the large two-line clock (time, then date) needs more than a toolbar.
-const kTopBarHeight = 96.0;
+const kTopBarHeight = 112.0;
 
 /// Top of the glyphs' focus circles (32 dp tall), so the glyphs centre at y = 32.
 const _kTopBarButtonsTop = 16.0;
@@ -216,8 +216,8 @@ const _kTopBarButtonsTop = 16.0;
 /// Top of the time line.
 const _kClockTop = 12.0;
 
-/// The time's font size; light weight, so the large digits stay calm.
-const _kClockSize = 56.0;
+/// The time's font size; extra-light weight, so the large digits stay calm.
+const _kClockSize = 72.0;
 
 /// Between the time and the date line under it (the digits already leave space below them).
 const _kClockLineGap = 0.0;
@@ -232,26 +232,29 @@ const Color _kTopBarIconColor = Color(0xCCFFFFFF); // 80% white
 
 /// Shadow on the characters only; there is no dark area behind the date and time.
 const List<Shadow> _kClockShadows = [
-  Shadow(color: Color(0x99000000), offset: Offset(0, 1), blurRadius: 3),
-  Shadow(color: Color(0x80000000), blurRadius: 1),
+  Shadow(color: Color(0x80000000), offset: Offset(0, 2), blurRadius: 8),
+  Shadow(color: Color(0x66000000), blurRadius: 2),
 ];
 
 const TextStyle _kDateTextStyle = TextStyle(
-  fontSize: 16,
+  fontSize: 20,
   height: 1.2,
   fontWeight: FontWeight.w400,
   letterSpacing: 0,
   color: Color(0xBFFFFFFF), // 75% white
   shadows: _kClockShadows,
+  fontFeatures: [FontFeature.tabularFigures()],
 );
 
 const TextStyle _kTimeTextStyle = TextStyle(
   fontSize: _kClockSize,
   height: 1.0,
-  fontWeight: FontWeight.w300,
+  fontWeight: FontWeight.w200,
   letterSpacing: 0,
   color: Colors.white,
   shadows: _kClockShadows,
+  // Same width for every digit, so the right-aligned time does not shift as minutes change.
+  fontFeatures: [FontFeature.tabularFigures()],
 );
 
 /// Apps opened from the top bar instead of the dock. Each shortcut opens the first of its

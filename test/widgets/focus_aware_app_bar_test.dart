@@ -78,7 +78,7 @@ void main() {
           reason: 'on the date line, under the time');
     });
 
-    testWidgets('a large light time with the date under it, buttons where they were, no backdrop', (tester) async {
+    testWidgets('a large extra-light time with the date under it, buttons where they were, no backdrop', (tester) async {
       when(settingsService.showDateInStatusBar).thenReturn(true);
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
@@ -87,9 +87,11 @@ void main() {
       final time = find.descendant(of: find.byKey(const Key('statusbar_clock')), matching: find.byType(Text));
       final dateStyle = tester.widget<Text>(date).style!;
       final timeStyle = tester.widget<Text>(time).style!;
-      expect(dateStyle.fontSize, 16);
-      expect(timeStyle.fontSize, 56);
-      expect(timeStyle.fontWeight, FontWeight.w300);
+      expect(dateStyle.fontSize, 20);
+      expect(timeStyle.fontSize, 72);
+      expect(timeStyle.fontWeight, FontWeight.w200);
+      expect(timeStyle.fontFeatures, contains(const FontFeature.tabularFigures()));
+      expect(dateStyle.fontFeatures, contains(const FontFeature.tabularFigures()));
       expect(dateStyle.shadows, isNotEmpty);
       expect(timeStyle.shadows, isNotEmpty);
 
