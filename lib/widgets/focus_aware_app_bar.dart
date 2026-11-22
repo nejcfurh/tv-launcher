@@ -98,8 +98,8 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
           elevation: 0,
           scrolledUnderElevation: 0,
           backgroundColor: Colors.transparent,
-          // The first glyph starts on the content keyline (x = 48); its focus circle reaches 7 dp
-          // further left.
+          // The first glyph starts on the content keyline (x = 48); its glass circle reaches
+          // [kAppBarGlassPadding] further left.
           titleSpacing: kTopBarKeyline - _kTopBarIconPadding,
           // Left side: Settings, WiFi usage, app shortcuts
           title: Padding(
@@ -201,10 +201,10 @@ const kTopBarKeyline = 48.0;
 const _kTopBarTopOffset = 8.0;
 
 const _kTopBarIconSize = 18.0;
-const _kTopBarIconPadding = 7.0;
+const _kTopBarIconPadding = kAppBarGlassPadding;
 
-/// 16 dp between glyphs, minus the focus circles' padding on both sides.
-const _kTopBarRingGap = 16.0 - 2 * _kTopBarIconPadding;
+/// 12 dp between the glass circles.
+const _kTopBarRingGap = 12.0;
 
 const Color _kTopBarIconColor = Color(0xCCFFFFFF); // 80% white
 

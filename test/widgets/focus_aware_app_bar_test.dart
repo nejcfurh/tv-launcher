@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 
+import '../mocks.dart';
 import '../mocks.mocks.dart';
 
 void main() {
@@ -35,12 +36,12 @@ void main() {
       when(settingsService.accentColorHex).thenReturn('6750A4');
     });
 
-    Widget createTestWidget() {
+    Widget createTestWidget({AppsService? appsService}) {
       return MultiProvider(
         providers: [
           ChangeNotifierProvider<SettingsService>.value(value: settingsService),
           ChangeNotifierProvider<LauncherState>.value(value: launcherState),
-          ChangeNotifierProvider<AppsService>.value(value: MockAppsService()),
+          ChangeNotifierProvider<AppsService>.value(value: appsService ?? MockAppsService()),
           ChangeNotifierProvider(create: (_) => NetworkService(FLauncherChannel())),
         ],
         child: MaterialApp(
@@ -60,6 +61,37 @@ void main() {
       expect(tester.getTopLeft(find.byIcon(Icons.settings_outlined)).dx, 48);
       expect(tester.getSize(find.byIcon(Icons.settings_outlined)), const Size(18, 18));
       expect(tester.getTopRight(find.byKey(const Key('statusbar_clock'))).dx, width - 48);
+    });
+
+    testWidgets('every top bar button sits in its own 36 dp glass circle, 12 dp apart', (tester) async {
+      final apps = MockAppsService();
+      for (final package in ['com.android.vending', 'com.phlox.tvwebbrowser', 'org.videolan.vlc']) {
+        when(apps.getApplication(package)).thenReturn(fakeApp(packageName: package, name: package));
+      }
+      when(apps.getAppIcon(any)).thenAnswer((_) async => throw StateError('no icon'));
+      await tester.pumpWidget(createTestWidget(appsService: apps));
+      await tester.pumpAndSettle();
+
+      final circles = tester.widgetList<CustomPaint>(find.byWidgetPredicate(
+          (w) => w is CustomPaint && w.painter is AppBarFocusRingPainter)).toList();
+      expect(circles, hasLength(4), reason: 'Settings, Play Store, browser, VLC');
+      final rects = find
+          .byWidgetPredicate((w) => w is CustomPaint && w.painter is AppBarFocusRingPainter)
+          .evaluate()
+          .map((e) => tester.getRect(find.byWidget(e.widget)))
+          .toList()
+        ..sort((a, b) => a.left.compareTo(b.left));
+      for (final rect in rects) {
+        expect(rect.size, const Size(36, 36));
+      }
+      for (var i = 1; i < rects.length; i++) {
+        expect(rects[i].left - rects[i - 1].right, 12, reason: 'gap after circle ${i - 1}');
+      }
+      // Unfocused, each still paints its glass.
+      for (final paint in circles) {
+        expect((paint.painter! as AppBarFocusRingPainter).progress, 0);
+      }
+      expect(rects.first.left, 48 - kAppBarGlassPadding);
     });
 
     testWidgets('network status sits with the clock and cannot take focus', (tester) async {

@@ -83,18 +83,28 @@ void main() {
       }
     });
 
-    test('focus paints only a 20% white circle, no outline', () {
-      const painter = AppBarFocusRingPainter(isFocused: true, isHovered: false, isPressed: false, progress: 1.0);
+    test('at rest it paints a 12% white glass circle with an 18% white hairline edge', () {
+      const painter = AppBarFocusRingPainter(isFocused: false, isHovered: false, isPressed: false, progress: 0.0);
       expect(
-        (Canvas canvas) => painter.paint(canvas, const Size(32, 32)),
+        (Canvas canvas) => painter.paint(canvas, const Size(36, 36)),
         paints
           ..rrect(
-            rrect: RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, 32, 32), const Radius.circular(16)),
-            color: Colors.white.withValues(alpha: 0.2),
+            rrect: RRect.fromRectAndRadius(const Rect.fromLTWH(0, 0, 36, 36), const Radius.circular(18)),
+            color: Colors.white.withValues(alpha: 0.12),
             style: PaintingStyle.fill,
-          ),
+          )
+          ..rrect(color: Colors.white.withValues(alpha: 0.18), style: PaintingStyle.stroke, strokeWidth: 1.0),
       );
-      expect((Canvas canvas) => painter.paint(canvas, const Size(32, 32)), paintsExactlyCountTimes(#drawRRect, 1));
+    });
+
+    test('focus brightens the circle to 30% white with a 70% white edge', () {
+      const painter = AppBarFocusRingPainter(isFocused: true, isHovered: false, isPressed: false, progress: 1.0);
+      expect(
+        (Canvas canvas) => painter.paint(canvas, const Size(36, 36)),
+        paints
+          ..rrect(color: Colors.white.withValues(alpha: 0.30), style: PaintingStyle.fill)
+          ..rrect(color: Colors.white.withValues(alpha: 0.70), style: PaintingStyle.stroke, strokeWidth: 1.5),
+      );
     });
 
     testWidgets('handles empty or zero-progress gracefully', (tester) async {
