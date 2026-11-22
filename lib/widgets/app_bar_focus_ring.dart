@@ -24,12 +24,8 @@ import '../providers/launcher_state.dart';
 
 /// A focusable and hoverable control for the top bar (Settings, app shortcuts).
 ///
-/// A glass circle sits behind the glyph at all times (44 dp around a 20 dp glyph with the default
-/// padding, as tall as the time beside it): 12% white with a hairline 18% white edge. Focus brightens it to 30% white with a 70%
-/// white edge and scales the control to 1.1.
-/// Space between a 20 dp top bar glyph and the edge of its glass circle.
-const kAppBarGlassPadding = 12.0;
-
+/// Focus shows a 32 dp circle of 20% white behind an 18 dp glyph (with the default padding) and
+/// scales the control to 1.1. There is no outline: the fill alone marks focus.
 class AppBarFocusRing extends StatefulWidget {
   final Widget child;
   final VoidCallback onPressed;
@@ -42,7 +38,7 @@ class AppBarFocusRing extends StatefulWidget {
     required this.child,
     required this.onPressed,
     this.focusNode,
-    this.padding = const EdgeInsets.all(kAppBarGlassPadding),
+    this.padding = const EdgeInsets.all(7),
     this.semanticLabel,
   });
 
@@ -111,7 +107,6 @@ class _AppBarFocusRingState extends State<AppBarFocusRing> {
                       isHovered: _isHovered,
                       isPressed: _isPressed,
                       progress: progress,
-                      hairline: 1 / MediaQuery.devicePixelRatioOf(context),
                     ),
                     child: child,
                   );
@@ -129,53 +124,39 @@ class _AppBarFocusRingState extends State<AppBarFocusRing> {
   }
 }
 
-/// Paints the glass circle (or pill) behind a top bar control: at rest a 12% white fill with an 18%
-/// white hairline edge; focused, hovered or pressed, it blends ([progress]) to a brighter fill and a
-/// 70% white edge.
+/// Paints the translucent white fill behind a focused, hovered or pressed top bar control.
 class AppBarFocusRingPainter extends CustomPainter {
   final bool isFocused;
   final bool isHovered;
   final bool isPressed;
   final double progress;
 
-  /// Width of the resting edge: one physical pixel.
-  final double hairline;
-
-  static const restFill = 0.12;
-  static const restEdge = 0.18;
-  static const activeEdge = 0.70;
-
   const AppBarFocusRingPainter({
     required this.isFocused,
     required this.isHovered,
     required this.isPressed,
     required this.progress,
-    this.hairline = 1.0,
   });
-
-  double get activeFill => isPressed ? 0.38 : (isFocused ? 0.30 : 0.24);
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (size.isEmpty) return;
-    final t = progress.clamp(0.0, 1.0);
-    final fill = restFill + (activeFill - restFill) * t;
-    final edge = restEdge + (activeEdge - restEdge) * t;
-    final edgeWidth = hairline + (1.5 - hairline) * t;
+    if (size.isEmpty || progress <= 0.0) return;
+
+    final double alpha;
+    if (isPressed) {
+      alpha = 0.28;
+    } else if (isFocused) {
+      alpha = 0.20;
+    } else {
+      alpha = 0.16;
+    }
 
     final rrect = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(min(size.width, size.height) / 2));
     canvas.drawRRect(
       rrect,
       Paint()
         ..style = PaintingStyle.fill
-        ..color = Colors.white.withValues(alpha: fill),
-    );
-    canvas.drawRRect(
-      rrect.deflate(edgeWidth / 2),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = edgeWidth
-        ..color = Colors.white.withValues(alpha: edge),
+        ..color = Colors.white.withValues(alpha: (alpha * progress).clamp(0.0, 1.0)),
     );
   }
 
@@ -184,6 +165,5 @@ class AppBarFocusRingPainter extends CustomPainter {
       oldDelegate.isFocused != isFocused ||
       oldDelegate.isHovered != isHovered ||
       oldDelegate.isPressed != isPressed ||
-      oldDelegate.progress != progress ||
-      oldDelegate.hairline != hairline;
+      oldDelegate.progress != progress;
 }

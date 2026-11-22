@@ -99,8 +99,8 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
           scrolledUnderElevation: 0,
           backgroundColor: Colors.transparent,
           toolbarHeight: kTopBarHeight,
-          // The first glyph starts on the content keyline (x = 48); its glass circle reaches
-          // [kAppBarGlassPadding] further left.
+          // The first glyph starts on the content keyline (x = 48); its focus circle reaches 7 dp
+          // further left.
           titleSpacing: kTopBarKeyline - _kTopBarIconPadding,
           // Left side: Settings, WiFi usage, app shortcuts
           title: SizedBox(
@@ -108,7 +108,7 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
             child: Align(
               alignment: Alignment.topLeft,
               child: Padding(
-            padding: const EdgeInsets.only(top: _kTopBarContentTop),
+            padding: const EdgeInsets.only(top: _kTopBarButtonsTop),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -139,7 +139,7 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
               child: Align(
                 alignment: Alignment.topRight,
                 child: Padding(
-              padding: const EdgeInsets.only(left: 16, right: kTopBarKeyline, top: _kTopBarContentTop),
+              padding: const EdgeInsets.only(left: 16, right: kTopBarKeyline, top: _kClockTop),
               child: Selector<SettingsService,
                   ({
                     bool showNetwork,
@@ -207,24 +207,26 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
 /// wide screen).
 const kTopBarKeyline = 48.0;
 
-/// Height of the top bar: the two-line clock (time, then date) needs more than a toolbar.
-const kTopBarHeight = 80.0;
+/// Height of the top bar: the large two-line clock (time, then date) needs more than a toolbar.
+const kTopBarHeight = 96.0;
 
-/// Top of the button circles and of the time line; both are [_kTopBarControlHeight] tall, so they
-/// centre at y = 32.
-const _kTopBarContentTop = 10.0;
+/// Top of the glyphs' focus circles (32 dp tall), so the glyphs centre at y = 32.
+const _kTopBarButtonsTop = 16.0;
 
-/// The time's font size, and the diameter of the button circles beside it.
-const _kTopBarControlHeight = 44.0;
+/// Top of the time line.
+const _kClockTop = 12.0;
 
-/// Between the time and the date line under it.
-const _kClockLineGap = 2.0;
+/// The time's font size; light weight, so the large digits stay calm.
+const _kClockSize = 56.0;
 
-const _kTopBarIconSize = 20.0;
-const _kTopBarIconPadding = kAppBarGlassPadding;
+/// Between the time and the date line under it (the digits already leave space below them).
+const _kClockLineGap = 0.0;
 
-/// 12 dp between the glass circles.
-const _kTopBarRingGap = 12.0;
+const _kTopBarIconSize = 18.0;
+const _kTopBarIconPadding = 7.0;
+
+/// 16 dp between glyphs, minus the focus circles' padding on both sides.
+const _kTopBarRingGap = 16.0 - 2 * _kTopBarIconPadding;
 
 const Color _kTopBarIconColor = Color(0xCCFFFFFF); // 80% white
 
@@ -244,9 +246,9 @@ const TextStyle _kDateTextStyle = TextStyle(
 );
 
 const TextStyle _kTimeTextStyle = TextStyle(
-  fontSize: _kTopBarControlHeight,
+  fontSize: _kClockSize,
   height: 1.0,
-  fontWeight: FontWeight.bold,
+  fontWeight: FontWeight.w300,
   letterSpacing: 0,
   color: Colors.white,
   shadows: _kClockShadows,

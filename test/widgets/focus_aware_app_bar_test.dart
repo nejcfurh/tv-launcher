@@ -11,7 +11,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
 
-import '../mocks.dart';
 import '../mocks.mocks.dart';
 
 void main() {
@@ -36,12 +35,12 @@ void main() {
       when(settingsService.accentColorHex).thenReturn('6750A4');
     });
 
-    Widget createTestWidget({AppsService? appsService}) {
+    Widget createTestWidget() {
       return MultiProvider(
         providers: [
           ChangeNotifierProvider<SettingsService>.value(value: settingsService),
           ChangeNotifierProvider<LauncherState>.value(value: launcherState),
-          ChangeNotifierProvider<AppsService>.value(value: appsService ?? MockAppsService()),
+          ChangeNotifierProvider<AppsService>.value(value: MockAppsService()),
           ChangeNotifierProvider(create: (_) => NetworkService(FLauncherChannel())),
         ],
         child: MaterialApp(
@@ -59,39 +58,8 @@ void main() {
 
       final width = tester.view.physicalSize.width / tester.view.devicePixelRatio;
       expect(tester.getTopLeft(find.byIcon(Icons.settings_outlined)).dx, 48);
-      expect(tester.getSize(find.byIcon(Icons.settings_outlined)), const Size(20, 20));
+      expect(tester.getSize(find.byIcon(Icons.settings_outlined)), const Size(18, 18));
       expect(tester.getTopRight(find.byKey(const Key('statusbar_clock'))).dx, width - 48);
-    });
-
-    testWidgets('every top bar button sits in its own 44 dp glass circle, 12 dp apart', (tester) async {
-      final apps = MockAppsService();
-      for (final package in ['com.android.vending', 'com.phlox.tvwebbrowser', 'org.videolan.vlc']) {
-        when(apps.getApplication(package)).thenReturn(fakeApp(packageName: package, name: package));
-      }
-      when(apps.getAppIcon(any)).thenAnswer((_) async => throw StateError('no icon'));
-      await tester.pumpWidget(createTestWidget(appsService: apps));
-      await tester.pumpAndSettle();
-
-      final circles = tester.widgetList<CustomPaint>(find.byWidgetPredicate(
-          (w) => w is CustomPaint && w.painter is AppBarFocusRingPainter)).toList();
-      expect(circles, hasLength(4), reason: 'Settings, Play Store, browser, VLC');
-      final rects = find
-          .byWidgetPredicate((w) => w is CustomPaint && w.painter is AppBarFocusRingPainter)
-          .evaluate()
-          .map((e) => tester.getRect(find.byWidget(e.widget)))
-          .toList()
-        ..sort((a, b) => a.left.compareTo(b.left));
-      for (final rect in rects) {
-        expect(rect.size, const Size(44, 44));
-      }
-      for (var i = 1; i < rects.length; i++) {
-        expect(rects[i].left - rects[i - 1].right, 12, reason: 'gap after circle ${i - 1}');
-      }
-      // Unfocused, each still paints its glass.
-      for (final paint in circles) {
-        expect((paint.painter! as AppBarFocusRingPainter).progress, 0);
-      }
-      expect(rects.first.left, 48 - kAppBarGlassPadding);
     });
 
     testWidgets('network status sits with the clock and cannot take focus', (tester) async {
@@ -110,7 +78,7 @@ void main() {
           reason: 'on the date line, under the time');
     });
 
-    testWidgets('a large time sits level with the button circles, the date under it, no backdrop', (tester) async {
+    testWidgets('a large light time with the date under it, buttons where they were, no backdrop', (tester) async {
       when(settingsService.showDateInStatusBar).thenReturn(true);
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
@@ -120,21 +88,18 @@ void main() {
       final dateStyle = tester.widget<Text>(date).style!;
       final timeStyle = tester.widget<Text>(time).style!;
       expect(dateStyle.fontSize, 16);
-      expect(timeStyle.fontSize, 44);
+      expect(timeStyle.fontSize, 56);
+      expect(timeStyle.fontWeight, FontWeight.w300);
       expect(dateStyle.shadows, isNotEmpty);
       expect(timeStyle.shadows, isNotEmpty);
 
       final timeRect = tester.getRect(find.byKey(const Key('statusbar_clock')));
       final dateRect = tester.getRect(find.byKey(const Key('statusbar_date')));
-      final settingsCircle = tester.getRect(find.ancestor(
-          of: find.byIcon(Icons.settings_outlined),
-          matching: find.byWidgetPredicate((w) => w is CustomPaint && w.painter is AppBarFocusRingPainter)).first);
-      expect(timeRect.height, 44);
-      expect(timeRect.center.dy, settingsCircle.center.dy, reason: 'time and circles share a centre line');
-      expect(settingsCircle.center.dy, 32);
-      expect(dateRect.top, greaterThan(timeRect.bottom), reason: 'the date is under the time');
+      expect(timeRect.top, 12);
+      expect(dateRect.top, greaterThanOrEqualTo(timeRect.bottom), reason: 'the date is under the time');
       expect(dateRect.right, timeRect.right, reason: 'both end on the right keyline');
       expect(dateRect.bottom, lessThanOrEqualTo(kTopBarHeight));
+      expect(tester.getCenter(find.byIcon(Icons.settings_outlined)).dy, 32, reason: 'glyphs stay where they were');
 
       // Nothing with a visible fill sits behind the characters.
       bool visibleFill(Widget w) =>
