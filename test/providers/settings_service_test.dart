@@ -50,6 +50,14 @@ void main() async {
     expect(settingsService.watchNextBigPictureMode, isFalse);
   });
 
+  test("the Wi-Fi glyph is off by default and can be switched on", () async {
+    final service = SettingsService(sharedPreferences);
+    expect(service.showNetworkIndicatorInStatusBar, isFalse);
+
+    await service.setShowNetworkIndicatorInStatusBar(true);
+    expect(SettingsService(sharedPreferences).showNetworkIndicatorInStatusBar, isTrue);
+  });
+
   test("watchNextMaxItems default and update", () async {
     final sharedPreferences = await SharedPreferences.getInstance();
     final settingsService = SettingsService(sharedPreferences);
