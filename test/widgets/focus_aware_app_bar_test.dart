@@ -59,11 +59,11 @@ void main() {
 
       final width = tester.view.physicalSize.width / tester.view.devicePixelRatio;
       expect(tester.getTopLeft(find.byIcon(Icons.settings_outlined)).dx, 48);
-      expect(tester.getSize(find.byIcon(Icons.settings_outlined)), const Size(18, 18));
+      expect(tester.getSize(find.byIcon(Icons.settings_outlined)), const Size(20, 20));
       expect(tester.getTopRight(find.byKey(const Key('statusbar_clock'))).dx, width - 48);
     });
 
-    testWidgets('every top bar button sits in its own 36 dp glass circle, 12 dp apart', (tester) async {
+    testWidgets('every top bar button sits in its own 44 dp glass circle, 12 dp apart', (tester) async {
       final apps = MockAppsService();
       for (final package in ['com.android.vending', 'com.phlox.tvwebbrowser', 'org.videolan.vlc']) {
         when(apps.getApplication(package)).thenReturn(fakeApp(packageName: package, name: package));
@@ -82,7 +82,7 @@ void main() {
           .toList()
         ..sort((a, b) => a.left.compareTo(b.left));
       for (final rect in rects) {
-        expect(rect.size, const Size(36, 36));
+        expect(rect.size, const Size(44, 44));
       }
       for (var i = 1; i < rects.length; i++) {
         expect(rects[i].left - rects[i - 1].right, 12, reason: 'gap after circle ${i - 1}');
@@ -106,9 +106,11 @@ void main() {
       expect(find.descendant(of: network, matching: find.byType(InkWell)), findsNothing);
       expect(tester.getCenter(network).dx, greaterThan(tester.getCenter(find.byIcon(Icons.settings_outlined)).dx));
       expect(tester.getTopRight(network).dx, lessThan(tester.getTopLeft(find.byKey(const Key('statusbar_date'))).dx));
+      expect(tester.getTopLeft(network).dy, greaterThan(tester.getBottomLeft(find.byKey(const Key('statusbar_clock'))).dy),
+          reason: 'on the date line, under the time');
     });
 
-    testWidgets('date and time share a baseline and have no backdrop', (tester) async {
+    testWidgets('a large time sits level with the button circles, the date under it, no backdrop', (tester) async {
       when(settingsService.showDateInStatusBar).thenReturn(true);
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
@@ -117,22 +119,23 @@ void main() {
       final time = find.descendant(of: find.byKey(const Key('statusbar_clock')), matching: find.byType(Text));
       final dateStyle = tester.widget<Text>(date).style!;
       final timeStyle = tester.widget<Text>(time).style!;
-      expect(dateStyle.fontSize, 14);
-      expect(timeStyle.fontSize, 22);
+      expect(dateStyle.fontSize, 16);
+      expect(timeStyle.fontSize, 44);
       expect(dateStyle.shadows, isNotEmpty);
       expect(timeStyle.shadows, isNotEmpty);
-      double baseline(Finder f) {
-        final text = tester.widget<Text>(f);
-        final painter = TextPainter(
-          text: TextSpan(text: text.data, style: DefaultTextStyle.of(tester.element(f)).style.merge(text.style)),
-          textDirection: TextDirection.ltr,
-          textScaler: MediaQuery.textScalerOf(tester.element(f)),
-        )..layout();
-        final distance = painter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
-        painter.dispose();
-        return tester.getTopLeft(f).dy + distance;
-      }
-      expect(baseline(date), moreOrLessEquals(baseline(time), epsilon: 0.5));
+
+      final timeRect = tester.getRect(find.byKey(const Key('statusbar_clock')));
+      final dateRect = tester.getRect(find.byKey(const Key('statusbar_date')));
+      final settingsCircle = tester.getRect(find.ancestor(
+          of: find.byIcon(Icons.settings_outlined),
+          matching: find.byWidgetPredicate((w) => w is CustomPaint && w.painter is AppBarFocusRingPainter)).first);
+      expect(timeRect.height, 44);
+      expect(timeRect.center.dy, settingsCircle.center.dy, reason: 'time and circles share a centre line');
+      expect(settingsCircle.center.dy, 32);
+      expect(dateRect.top, greaterThan(timeRect.bottom), reason: 'the date is under the time');
+      expect(dateRect.right, timeRect.right, reason: 'both end on the right keyline');
+      expect(dateRect.bottom, lessThanOrEqualTo(kTopBarHeight));
+
       // Nothing with a visible fill sits behind the characters.
       bool visibleFill(Widget w) =>
           (w is ColoredBox && w.color.a > 0) ||
@@ -151,7 +154,7 @@ void main() {
       final opacity = tester.widget<AnimatedOpacity>(
         find.descendant(of: find.byType(FocusAwareAppBar), matching: find.byType(AnimatedOpacity)),
       );
-      expect(container.constraints?.maxHeight, kToolbarHeight);
+      expect(container.constraints?.maxHeight, kTopBarHeight);
       expect(opacity.opacity, 1.0);
     });
 
@@ -168,7 +171,7 @@ void main() {
       AnimatedOpacity opacity = tester.widget<AnimatedOpacity>(
         find.descendant(of: find.byType(FocusAwareAppBar), matching: find.byType(AnimatedOpacity)),
       );
-      expect(container.constraints?.maxHeight, kToolbarHeight);
+      expect(container.constraints?.maxHeight, kTopBarHeight);
       expect(opacity.opacity, 1.0);
 
       // User navigates down into the grid
@@ -196,7 +199,7 @@ void main() {
       opacity = tester.widget<AnimatedOpacity>(
         find.descendant(of: find.byType(FocusAwareAppBar), matching: find.byType(AnimatedOpacity)),
       );
-      expect(container.constraints?.maxHeight, kToolbarHeight);
+      expect(container.constraints?.maxHeight, kTopBarHeight);
       expect(opacity.opacity, 1.0);
     });
 
@@ -245,7 +248,7 @@ void main() {
       ignorePointer = tester.widget<IgnorePointer>(
         find.descendant(of: find.byType(FocusAwareAppBar), matching: find.byType(IgnorePointer)),
       );
-      expect(container.constraints?.maxHeight, kToolbarHeight);
+      expect(container.constraints?.maxHeight, kTopBarHeight);
       expect(opacity.opacity, 1.0);
       expect(ignorePointer.ignoring, isFalse);
     });
@@ -272,7 +275,7 @@ void main() {
       container = tester.widget<AnimatedContainer>(
         find.descendant(of: find.byType(FocusAwareAppBar), matching: find.byType(AnimatedContainer)),
       );
-      expect(container.constraints?.maxHeight, kToolbarHeight);
+      expect(container.constraints?.maxHeight, kTopBarHeight);
     });
   });
 }

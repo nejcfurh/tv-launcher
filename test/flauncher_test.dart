@@ -571,7 +571,7 @@ void main() {
     expect(cone, findsOneWidget);
     expect(tester.widget<VlcConeIcon>(cone).color, const Color(0xCCFFFFFF));
     // Same box as the settings and globe glyphs, and drawn, not a picture.
-    expect(tester.getSize(cone), const Size(18, 18));
+    expect(tester.getSize(cone), const Size(20, 20));
     expect(find.descendant(of: shortcut, matching: find.byType(Image)), findsNothing);
     verifyNever(appsService.getAppIcon("org.videolan.vlc"));
 

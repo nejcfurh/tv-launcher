@@ -25,7 +25,7 @@ class FocusAwareAppBar extends StatefulWidget implements PreferredSizeWidget
   }
 
   @override
-  Size get preferredSize => Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(kTopBarHeight);
 }
 
 class FocusAwareAppBarState extends State<FocusAwareAppBar>
@@ -80,10 +80,10 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                 child: AnimatedContainer(
                   curve: Curves.decelerate,
                   duration: const Duration(milliseconds: 200),
-                  height: isVisible ? kToolbarHeight : 0,
+                  height: isVisible ? kTopBarHeight : 0,
                   child: OverflowBox(
                     minHeight: 0,
-                    maxHeight: kToolbarHeight,
+                    maxHeight: kTopBarHeight,
                     alignment: Alignment.topCenter,
                     child: widget!,
                   ),
@@ -98,12 +98,17 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
           elevation: 0,
           scrolledUnderElevation: 0,
           backgroundColor: Colors.transparent,
+          toolbarHeight: kTopBarHeight,
           // The first glyph starts on the content keyline (x = 48); its glass circle reaches
           // [kAppBarGlassPadding] further left.
           titleSpacing: kTopBarKeyline - _kTopBarIconPadding,
           // Left side: Settings, WiFi usage, app shortcuts
-          title: Padding(
-            padding: const EdgeInsets.only(top: _kTopBarTopOffset),
+          title: SizedBox(
+            height: kTopBarHeight,
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+            padding: const EdgeInsets.only(top: _kTopBarContentTop),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -124,11 +129,17 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                 const _AppShortcuts(),
               ],
             ),
+              ),
+            ),
           ),
-          // Right side: network status, date and time
+          // Right side: time, with network status and date under it
           actions: [
-            Padding(
-              padding: const EdgeInsets.only(left: 16, right: kTopBarKeyline, top: _kTopBarTopOffset),
+            SizedBox(
+              height: kTopBarHeight,
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+              padding: const EdgeInsets.only(left: 16, right: kTopBarKeyline, top: _kTopBarContentTop),
               child: Selector<SettingsService,
                   ({
                     bool showNetwork,
@@ -145,45 +156,44 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
                 builder: (context, dateTimeSettings, _) {
                   final showDate = dateTimeSettings.showDateInStatusBar;
                   final showTime = dateTimeSettings.showTimeInStatusBar;
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Status only: not focusable; Wi-Fi settings stay reachable through Settings.
-                      if (dateTimeSettings.showNetwork) ...[
-                        const NetworkWidget(
-                          key: Key("statusbar_network"),
-                          size: 15,
-                          color: Color(0xB3FFFFFF), // 70% white
-                          padding: EdgeInsets.zero,
-                          shadows: [Shadow(color: Color(0x99000000), offset: Offset(0, 1), blurRadius: 2)],
-                        ),
-                        if (showDate || showTime) const SizedBox(width: 10),
-                      ],
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          if (showDate)
-                            DateTimeWidget(
-                              dateTimeSettings.dateFormat,
-                              key: const Key("statusbar_date"),
-                              updateInterval: const Duration(minutes: 1),
-                              textStyle: _kDateTextStyle,
-                            ),
-                          if (showDate && showTime) const SizedBox(width: 10),
-                          if (showTime)
-                            DateTimeWidget(
-                              dateTimeSettings.timeFormat,
-                              key: const Key("statusbar_clock"),
-                              updateInterval: const Duration(minutes: 1),
-                              textStyle: _kTimeTextStyle,
-                            ),
-                        ],
+                  final dateLine = [
+                    // Status only: not focusable; Wi-Fi settings stay reachable through Settings.
+                    if (dateTimeSettings.showNetwork)
+                      const NetworkWidget(
+                        key: Key("statusbar_network"),
+                        size: 15,
+                        color: Color(0xB3FFFFFF), // 70% white
+                        padding: EdgeInsets.zero,
+                        shadows: [Shadow(color: Color(0x99000000), offset: Offset(0, 1), blurRadius: 2)],
                       ),
+                    if (dateTimeSettings.showNetwork && showDate) const SizedBox(width: 8),
+                    if (showDate)
+                      DateTimeWidget(
+                        dateTimeSettings.dateFormat,
+                        key: const Key("statusbar_date"),
+                        updateInterval: const Duration(minutes: 1),
+                        textStyle: _kDateTextStyle,
+                      ),
+                  ];
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (showTime)
+                        DateTimeWidget(
+                          dateTimeSettings.timeFormat,
+                          key: const Key("statusbar_clock"),
+                          updateInterval: const Duration(minutes: 1),
+                          textStyle: _kTimeTextStyle,
+                        ),
+                      if (showTime && dateLine.isNotEmpty) const SizedBox(height: _kClockLineGap),
+                      if (dateLine.isNotEmpty)
+                        Row(mainAxisSize: MainAxisSize.min, children: dateLine),
                     ],
                   );
                 },
+              ),
+                ),
               ),
             ),
           ],
@@ -197,10 +207,20 @@ class FocusAwareAppBarState extends State<FocusAwareAppBar>
 /// wide screen).
 const kTopBarKeyline = 48.0;
 
-/// Moves the bar's content down so the glyphs centre at y = 32.
-const _kTopBarTopOffset = 8.0;
+/// Height of the top bar: the two-line clock (time, then date) needs more than a toolbar.
+const kTopBarHeight = 80.0;
 
-const _kTopBarIconSize = 18.0;
+/// Top of the button circles and of the time line; both are [_kTopBarControlHeight] tall, so they
+/// centre at y = 32.
+const _kTopBarContentTop = 10.0;
+
+/// The time's font size, and the diameter of the button circles beside it.
+const _kTopBarControlHeight = 44.0;
+
+/// Between the time and the date line under it.
+const _kClockLineGap = 2.0;
+
+const _kTopBarIconSize = 20.0;
 const _kTopBarIconPadding = kAppBarGlassPadding;
 
 /// 12 dp between the glass circles.
@@ -215,7 +235,8 @@ const List<Shadow> _kClockShadows = [
 ];
 
 const TextStyle _kDateTextStyle = TextStyle(
-  fontSize: 14,
+  fontSize: 16,
+  height: 1.2,
   fontWeight: FontWeight.w400,
   letterSpacing: 0,
   color: Color(0xBFFFFFFF), // 75% white
@@ -223,7 +244,8 @@ const TextStyle _kDateTextStyle = TextStyle(
 );
 
 const TextStyle _kTimeTextStyle = TextStyle(
-  fontSize: 22,
+  fontSize: _kTopBarControlHeight,
+  height: 1.0,
   fontWeight: FontWeight.bold,
   letterSpacing: 0,
   color: Colors.white,

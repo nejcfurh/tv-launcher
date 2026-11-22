@@ -24,11 +24,11 @@ import '../providers/launcher_state.dart';
 
 /// A focusable and hoverable control for the top bar (Settings, app shortcuts).
 ///
-/// A glass circle sits behind the glyph at all times (36 dp around an 18 dp glyph with the default
-/// padding): 12% white with a hairline 18% white edge. Focus brightens it to 30% white with a 70%
+/// A glass circle sits behind the glyph at all times (44 dp around a 20 dp glyph with the default
+/// padding, as tall as the time beside it): 12% white with a hairline 18% white edge. Focus brightens it to 30% white with a 70%
 /// white edge and scales the control to 1.1.
-/// Space between an 18 dp top bar glyph and the edge of its glass circle.
-const kAppBarGlassPadding = 9.0;
+/// Space between a 20 dp top bar glyph and the edge of its glass circle.
+const kAppBarGlassPadding = 12.0;
 
 class AppBarFocusRing extends StatefulWidget {
   final Widget child;
