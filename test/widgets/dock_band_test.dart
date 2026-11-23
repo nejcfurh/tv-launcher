@@ -162,6 +162,25 @@ void main() {
       expect(px(60, 22), [255, 255, 255]);
     });
 
+    test('repaints the art in two colours when given a duotone, as on the Netflix tile', () {
+      // A white banner with a red wordmark.
+      final data = ByteData(width * height * 4);
+      for (var y = 0; y < height; y++) {
+        for (var x = 0; x < width; x++) {
+          final o = (y * width + x) * 4;
+          final logo = x >= 20 && x < 40 && y >= 10 && y < 20;
+          data.setUint8(o, logo ? 229 : 255);
+          data.setUint8(o + 1, logo ? 9 : 255);
+          data.setUint8(o + 2, logo ? 20 : 255);
+          data.setUint8(o + 3, 255);
+        }
+      }
+      final flat = bandFlattenBackground(data, width, const Color(0xFFFFFFFF),
+          duotone: kBandArtDuotones['com.netflix.ninja'])!;
+      expect(at(flat, 3, 3), [0xE5, 0x09, 0x14]);
+      expect(at(flat, 30, 15), [255, 255, 255]);
+    });
+
     test('leaves art with transparent edges (an icon) alone', () {
       expect(bandFlattenBackground(gradientWithLogo(edgeAlpha: 0), width, fill), isNull);
     });
@@ -176,6 +195,20 @@ void main() {
         data.setUint8(i * 4 + 3, 255);
       }
       expect(bandFlattenBackground(data, width, fill), isNull);
+    });
+  });
+
+  group('bandLogoRect', () {
+    test('a wide banner takes three quarters of the tile height, centred', () {
+      final rect = bandLogoRect(const Size(200, 56), 10, const Size(320, 180));
+      expect(rect.height, closeTo(42, 1e-9));
+      expect(rect.center, const Offset(100, 28));
+    });
+
+    test('a banner too wide for the tile is narrowed to clear the slanted sides', () {
+      final rect = bandLogoRect(const Size(100, 56), 10, const Size(320, 80));
+      expect(rect.width, 100 - 2 * 10 - 12);
+      expect(rect.height, closeTo(68 * 80 / 320, 1e-9));
     });
   });
 

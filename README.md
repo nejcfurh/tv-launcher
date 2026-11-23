@@ -4,13 +4,13 @@ A minimal, Apple TV-style home screen for Android TV and Google TV, built on top
 **[Arc Launcher](https://github.com/meddouribadis/arclauncher)** by
 [meddouribadis](https://github.com/meddouribadis).
 
-The goal is a quiet home screen: one row of the apps you actually use, a full-screen
+The goal is a quiet home screen: one band of the apps you actually use, a full-screen
 "Watch Next" banner above it, and nothing else. No ads, no recommendations rows, no
 store tiles.
 
-![TV Launcher home screen: top bar with settings, Wi-Fi, Play Store, browser and VLC shortcuts, the date and time, an Unsplash wallpaper, and a dock of eight apps at the bottom](docs/images/tv-launcher-home.jpg)
+![TV Launcher home screen: settings, Play Store, browser and VLC shortcuts at the top left, a large clock with the date at the top right, a full-screen Watch Next banner for an episode on Disney+, and the app band at the bottom with the first app selected](docs/images/tv-launcher-home.jpg)
 
-<sub>Home screen with the Watch Next banner turned off, on an Unsplash wallpaper.</sub>
+<sub>Home screen with the Watch Next banner showing an episode from Disney+.</sub>
 
 > TV Launcher is a fork. Almost everything that makes it work — the Watch Next
 > integration, the dock, wallpapers, settings and the overall architecture — comes from
@@ -20,9 +20,16 @@ store tiles.
 
 ### Home screen
 
-- **Single dock row** anchored to the bottom of the screen, with as many apps as you
-  add. Arc shows at most six apps in a row; TV Launcher widens the row instead of
-  dropping apps.
+- **App band** across the whole width of the screen, near the bottom: one parallelogram
+  per app, leaning 10°, with the app's name under it. A half tile at each screen edge
+  fades out. The selected tile grows 15% and the others are dimmed. Right from the last
+  app goes to the first, and Left from the first app goes to the last. Arc shows at most
+  six apps in a row; the band fits as many apps as you add.
+- **Flat tile colours.** Each tile shows the app's logo, up to 75% of the tile's height,
+  on one flat colour taken from its banner. Gradients and glows behind the logo are
+  removed. Netflix's white banner is shown as a red tile with a white logo.
+- **The banner follows the band.** When the selection stays on an app for a moment, the
+  Watch Next banner shows that app's first item, if it has one.
 - **Immersive Watch Next banner** with a source badge that reads
   `WATCH NEXT ON <logo>`. Netflix, HBO, YouTube, Apple TV and SkyShowtime use bundled
   white logos; other apps use the foreground layer of their own icon, drawn in white.
@@ -31,15 +38,22 @@ store tiles.
   ([TV Bro](https://github.com/truefedex/tv-bro), falling back to the TV's built-in
   browser) and [VLC](https://www.videolan.org/vlc/download-android.html) for network
   drives. Each shortcut only appears when its app is installed.
-- **Full European date** in the top bar, e.g. `Tuesday, 17.11.2026`.
+- **Large two-line clock** in the top bar: the time in large, thin figures, with the
+  date under it, e.g. `Friday, 20/11/2026`. The Wi-Fi glyph is off by default
+  (Settings → Status bar turns it on).
+- **Idle dim.** After 3 minutes without a key press, the top bar, the banner text and the
+  band fade out and the picture darkens. The next key press only wakes the screen.
 
 ### Tiles
 
 - **Custom app names**: hold OK on a tile → *Rename*. Leave the field empty to use the
-  app's own name again.
-- **Show the name of the selected app only**, like Apple TV, so labels don't crowd the
-  row (Settings → Interface → Miscellaneous).
-- **Tile corner radius**: 6, 12, 20 or 28 dp (Settings → Interface → Appearance).
+  app's own name again. The band shows the new name, e.g. "EON TV" for "EON TV
+  Slovenija".
+- **Show the name of the selected app only**, like Apple TV, for the tiles in the app
+  grid below the band (Settings → Interface → Miscellaneous). The band always shows its
+  names.
+- **Tile corner radius** for the app grid: 6, 12, 20 or 28 dp (Settings → Interface →
+  Appearance).
 
 ### Speed and Home button
 
@@ -48,6 +62,8 @@ store tiles.
 - **Home button service.** Google TV sends the remote's Home button to its own launcher
   even when another app is the default home app. An accessibility service replaces the
   stock home screen with TV Launcher whenever it appears, including after a reboot.
+- **Home while TV Launcher is open** closes the settings panel and any dialog, scrolls
+  back to the top and selects the first app in the band.
 
 ### Other
 
@@ -194,6 +210,7 @@ TV Launcher stands on a chain of open-source launchers:
 The HBO, YouTube and Apple TV logo shapes come from [Simple Icons](https://simpleicons.org)
 (CC0). The VLC cone in the top bar is based on Simple Icons' VLC shape.
 
-Wallpaper in the screenshot: photo by Ganapathy Kumar on [Unsplash](https://unsplash.com).
+The picture in the screenshot is a still from *New Girl*, supplied by the Disney+ app
+through Watch Next. It belongs to its rights holders.
 
 TV Launcher changes by [Nejc Furh](https://nejcfurh.dev).

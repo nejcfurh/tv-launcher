@@ -408,6 +408,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
               curve: Curves.easeOut,
               child: BandTileFace(
                 image: _loadedImage?.$2,
+                duotone: kBandArtDuotones[widget.application.packageName],
                 focused: focused || _moving,
                 slant: slant,
                 child: Material(
