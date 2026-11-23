@@ -18,6 +18,7 @@
 
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flauncher/models/app.dart';
@@ -25,6 +26,7 @@ import 'package:flauncher/models/category.dart';
 import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/widgets/app_card.dart';
 import 'package:flauncher/widgets/category_clean_row.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -148,8 +150,8 @@ int _histogramMedian(List<int> histogram, int count) {
 const kBandFlattenBackground = 28.0;
 const kBandFlattenLogo = 72.0;
 
-/// [rgba] with its background (a smooth gradient, fitted to the whole picture while ignoring the
-/// logo) replaced by the single colour [fill], keeping the logo on top. Null when the art has
+/// [rgba] with its background (a gradient or glow, fitted as a smooth surface to the whole picture
+/// while ignoring the logo) replaced by the single colour [fill], keeping the logo on top. Null when the art has
 /// transparent edges (an icon) or when less than half of it fits a smooth background (a photo), so
 /// those are left as they are.
 Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
@@ -167,22 +169,45 @@ Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
     }
   }
 
-  // Quadratic surface per channel over (u, v) in 0–1, refitted to the pixels closest to it: first
-  // the better half (the logo is the minority, so it drops out), then all within reach.
-  List<double> basis(double u, double v) => [1, u, v, u * u, u * v, v * v];
+  // A smooth surface per channel (a grid of cubic patches: loose enough to follow a glow, too
+  // stiff to follow logo strokes), fitted to the pixels close to it. The first pick of background
+  // pixels comes from the colours along the art's edges, so a glow running along an edge counts as
+  // background from the start; each refit then takes in all pixels within reach of the surface.
   final step = math.max(1, math.sqrt(pixels / 4000).floor());
-  final samples = <(List<double>, int)>[
+  final samples = <(List<(int, double)>, int)>[
     for (var y = 0; y < height; y += step)
-      for (var x = 0; x < width; x += step) (basis(x / (width - 1), y / (height - 1)), (y * width + x) * 4),
+      for (var x = 0; x < width; x += step) (_bandSurfaceBasis(x / (width - 1), y / (height - 1)), (y * width + x) * 4),
   ];
-  var inliers = List.filled(samples.length, true);
-  late List<List<double>> coefficients;
-  double distance(List<double> b, int o) {
+  final top = _edgeProfile(src, width, bandY, (x, d) => (d * width + x) * 4);
+  final bottom = _edgeProfile(src, width, bandY, (x, d) => ((height - 1 - d) * width + x) * 4);
+  final left = _edgeProfile(src, height, bandX, (y, d) => (y * width + d) * 4);
+  final right = _edgeProfile(src, height, bandX, (y, d) => (y * width + width - 1 - d) * 4);
+  double edgeDistance(int x, int y) {
+    final u = x / (width - 1), v = y / (height - 1), o = (y * width + x) * 4;
+    var d2 = 0.0;
+    for (var c = 0; c < 3; c++) {
+      // Coons patch: the surface that runs through all four edge profiles.
+      final model = (1 - u) * left[y][c] + u * right[y][c] + (1 - v) * top[x][c] + v * bottom[x][c] -
+          ((1 - u) * (1 - v) * top[0][c] +
+              u * (1 - v) * top[width - 1][c] +
+              (1 - u) * v * bottom[0][c] +
+              u * v * bottom[width - 1][c]);
+      final delta = src[o + c] - model;
+      d2 += delta * delta;
+    }
+    return math.sqrt(d2);
+  }
+
+  var inliers = [
+    for (final (_, o) in samples) edgeDistance((o ~/ 4) % width, (o ~/ 4) ~/ width) <= kBandFlattenLogo,
+  ];
+  late List<Float64List> coefficients;
+  double distance(List<(int, double)> basis, int o) {
     var d2 = 0.0;
     for (var c = 0; c < 3; c++) {
       var model = 0.0;
-      for (var k = 0; k < 6; k++) {
-        model += coefficients[c][k] * b[k];
+      for (final (k, w) in basis) {
+        model += coefficients[c][k] * w;
       }
       final delta = src[o + c] - model;
       d2 += delta * delta;
@@ -190,14 +215,14 @@ Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
     return math.sqrt(d2);
   }
 
-  for (var round = 0; round < 6; round++) {
-    final fitted = _fitQuadratic(samples, inliers, src);
+  for (var round = 0; round < 5; round++) {
+    final fitted = _fitBandSurface(samples, inliers, src);
     if (fitted == null) return null;
     coefficients = fitted;
-    if (round == 5) break;
+    if (round == 4) break;
     final distances = [for (final (b, o) in samples) distance(b, o)];
     final median = ([...distances]..sort())[distances.length ~/ 2];
-    final cutoff = round < 3 ? median : math.max(kBandFlattenBackground, 2.5 * median);
+    final cutoff = math.max(kBandFlattenBackground, 2.5 * median);
     inliers = [for (final d in distances) d <= cutoff];
   }
 
@@ -207,7 +232,7 @@ Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
   for (var y = 0; y < height; y++) {
     for (var x = 0; x < width; x++) {
       final o = (y * width + x) * 4;
-      final t = ((distance(basis(x / (width - 1), y / (height - 1)), o) - kBandFlattenBackground) /
+      final t = ((distance(_bandSurfaceBasis(x / (width - 1), y / (height - 1)), o) - kBandFlattenBackground) /
               (kBandFlattenLogo - kBandFlattenBackground))
           .clamp(0.0, 1.0);
       final logo = t * t * (3 - 2 * t);
@@ -221,33 +246,95 @@ Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
   return background * 2 >= pixels ? out : null;
 }
 
-/// Least squares fit of the six quadratic terms to the RGB of the [inliers] among [samples]:
+Uint8List? _flattenJob(({ByteData bytes, int width, Color fill}) job) =>
+    bandFlattenBackground(job.bytes, job.width, job.fill);
+
+/// Mean colour of the [depth] pixels in from one edge at each point along it, then a running
+/// median along the edge, so a logo that touches it for a short stretch does not bend it.
+List<List<double>> _edgeProfile(Uint8List src, int length, int depth, int Function(int along, int across) offset) {
+  final means = <List<double>>[];
+  for (var i = 0; i < length; i++) {
+    var r = 0.0, g = 0.0, b = 0.0;
+    for (var d = 0; d < depth; d++) {
+      final o = offset(i, d);
+      r += src[o];
+      g += src[o + 1];
+      b += src[o + 2];
+    }
+    means.add([r / depth, g / depth, b / depth]);
+  }
+  final radius = math.max(2, (length * 0.1).round());
+  double median(int i, int c) {
+    final window = [
+      for (var j = math.max(0, i - radius); j < math.min(length, i + radius + 1); j++) means[j][c],
+    ]..sort();
+    return window[window.length ~/ 2];
+  }
+
+  return [
+    for (var i = 0; i < length; i++) [median(i, 0), median(i, 1), median(i, 2)],
+  ];
+}
+
+/// Patches across and down the background surface.
+const _kSurfaceColumns = 4, _kSurfaceRows = 3;
+const _kSurfaceTerms = (_kSurfaceColumns + 3) * (_kSurfaceRows + 3);
+
+List<double> _cubicBSpline(double t) {
+  final t2 = t * t, t3 = t2 * t;
+  return [(1 - t) * (1 - t) * (1 - t) / 6, (3 * t3 - 6 * t2 + 4) / 6, (-3 * t3 + 3 * t2 + 3 * t + 1) / 6, t3 / 6];
+}
+
+/// The 16 non-zero terms of the surface at (u, v) in 0–1, as (term, weight).
+List<(int, double)> _bandSurfaceBasis(double u, double v) {
+  final su = math.min((u * _kSurfaceColumns).floor(), _kSurfaceColumns - 1);
+  final sv = math.min((v * _kSurfaceRows).floor(), _kSurfaceRows - 1);
+  final bu = _cubicBSpline(u * _kSurfaceColumns - su), bv = _cubicBSpline(v * _kSurfaceRows - sv);
+  return [
+    for (var j = 0; j < 4; j++)
+      for (var i = 0; i < 4; i++) ((sv + j) * (_kSurfaceColumns + 3) + su + i, bu[i] * bv[j]),
+  ];
+}
+
+/// Least squares fit of the surface to the RGB of the [inliers] among [samples], with a light pull
+/// of neighbouring terms towards each other so areas without samples (under the logo) stay smooth:
 /// one coefficient list per channel, or null when too few samples are left to fit.
-List<List<double>>? _fitQuadratic(List<(List<double>, int)> samples, List<bool> inliers, Uint8List src) {
-  final a = List.generate(6, (_) => List.filled(6, 0.0));
-  final rhs = List.generate(3, (_) => List.filled(6, 0.0));
+List<Float64List>? _fitBandSurface(List<(List<(int, double)>, int)> samples, List<bool> inliers, Uint8List src) {
+  const n = _kSurfaceTerms;
+  final a = List.generate(n, (_) => Float64List(n));
+  final rhs = List.generate(3, (_) => Float64List(n));
   var used = 0;
   for (var i = 0; i < samples.length; i++) {
     if (!inliers[i]) continue;
-    final (b, o) = samples[i];
+    final (basis, o) = samples[i];
     used++;
-    for (var r = 0; r < 6; r++) {
-      for (var c = 0; c < 6; c++) {
-        a[r][c] += b[r] * b[c];
+    for (final (r, wr) in basis) {
+      for (final (c, wc) in basis) {
+        a[r][c] += wr * wc;
       }
       for (var ch = 0; ch < 3; ch++) {
-        rhs[ch][r] += b[r] * src[o + ch];
+        rhs[ch][r] += wr * src[o + ch];
       }
     }
   }
-  if (used < 12) return null;
+  if (used < 2 * n) return null;
+  final smoothness = used * 0.00002;
+  const columns = _kSurfaceColumns + 3;
+  for (var k = 0; k < n; k++) {
+    for (final neighbour in [if (k % columns < columns - 1) k + 1, if (k + columns < n) k + columns]) {
+      a[k][k] += smoothness;
+      a[neighbour][neighbour] += smoothness;
+      a[k][neighbour] -= smoothness;
+      a[neighbour][k] -= smoothness;
+    }
+  }
   // Gaussian elimination with partial pivoting, all three channels at once.
-  for (var col = 0; col < 6; col++) {
+  for (var col = 0; col < n; col++) {
     var pivot = col;
-    for (var r = col + 1; r < 6; r++) {
+    for (var r = col + 1; r < n; r++) {
       if (a[r][col].abs() > a[pivot][col].abs()) pivot = r;
     }
-    if (a[pivot][col].abs() < 1e-9) return null;
+    if (a[pivot][col].abs() < 1e-12) return null;
     if (pivot != col) {
       final row = a[col];
       a[col] = a[pivot];
@@ -258,9 +345,10 @@ List<List<double>>? _fitQuadratic(List<(List<double>, int)> samples, List<bool> 
         v[pivot] = t;
       }
     }
-    for (var r = col + 1; r < 6; r++) {
+    for (var r = col + 1; r < n; r++) {
       final f = a[r][col] / a[col][col];
-      for (var c = col; c < 6; c++) {
+      if (f == 0) continue;
+      for (var c = col; c < n; c++) {
         a[r][c] -= f * a[col][c];
       }
       for (final v in rhs) {
@@ -271,10 +359,10 @@ List<List<double>>? _fitQuadratic(List<(List<double>, int)> samples, List<bool> 
   return [
     for (final v in rhs)
       () {
-        final x = List.filled(6, 0.0);
-        for (var r = 5; r >= 0; r--) {
+        final x = Float64List(n);
+        for (var r = n - 1; r >= 0; r--) {
           var sum = v[r];
-          for (var c = r + 1; c < 6; c++) {
+          for (var c = r + 1; c < n; c++) {
             sum -= a[r][c] * x[c];
           }
           x[r] = sum / a[r][r];
@@ -430,7 +518,10 @@ class _BandTileFaceState extends State<BandTileFace> {
     try {
       final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       colours = bytes == null ? null : bandArtColours(bytes, image.width);
-      final flat = bytes == null || colours == null ? null : bandFlattenBackground(bytes, image.width, colours.edge);
+      // Up to ~0.1 s per banner, so off the UI thread.
+      final flat = bytes == null || colours == null
+          ? null
+          : await compute(_flattenJob, (bytes: bytes, width: image.width, fill: colours.edge));
       if (flat != null) {
         final completer = Completer<ui.Image>();
         ui.decodeImageFromPixels(flat, image.width, image.height, ui.PixelFormat.rgba8888, completer.complete);

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -115,24 +116,50 @@ void main() {
       expect(at(flat, 52, 15), [0x20, 0x50, 0xA0]);
     });
 
-    test('flattens a radial glow even when the logo runs into the edge for most of its height', () {
-      final data = ByteData(width * height * 4);
-      for (var y = 0; y < height; y++) {
-        for (var x = 0; x < width; x++) {
-          final o = (y * width + x) * 4;
-          final glow = 60 - ((x - 15) * (x - 15) + (y - 12) * (y - 12)) ~/ 30;
-          final logo = x >= 45 && y >= 5 && y < 25;
-          data.setUint8(o, logo ? 255 : 10 + glow ~/ 2);
-          data.setUint8(o + 1, logo ? 255 : 50 + glow);
-          data.setUint8(o + 2, logo ? 255 : 150 + glow);
+    test('flattens a radial glow on a diagonal gradient, as on the PS5 tile banner', () {
+      const w = 120, h = 60;
+      final data = ByteData(w * h * 4);
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final o = (y * w + x) * 4;
+          final diagonal = (x / w + y / h) / 2;
+          final glow = math.max(0.0, 1 - math.sqrt((x - 30) * (x - 30) + (y - 30) * (y - 30)) / 34) * 0.45;
+          final logo = (x >= 50 && x < 58 || x >= 70 && x < 78 || x >= 90 && x < 98) && y >= 18 && y < 42;
+          data.setUint8(o, logo ? 255 : (95 * glow).round());
+          data.setUint8(o + 1, logo ? 255 : (32 + 80 * diagonal + 160 * glow * (1 - diagonal)).round().clamp(0, 255));
+          data.setUint8(o + 2, logo ? 255 : (91 + 118 * diagonal + 255 * glow * (1 - diagonal)).round().clamp(0, 255));
           data.setUint8(o + 3, 255);
         }
       }
-      final flat = bandFlattenBackground(data, width, fill)!;
-      for (final (x, y) in [(15, 12), (2, 28), (40, 15), (50, 2), (58, 28)]) {
-        expect(at(flat, x, y), [0x20, 0x50, 0xA0], reason: '($x, $y)');
+      final flat = bandFlattenBackground(data, w, fill)!;
+      List<int> px(int x, int y) => flat.sublist((y * w + x) * 4, (y * w + x) * 4 + 3);
+      for (final (x, y) in [(30, 30), (2, 2), (117, 57), (64, 30), (84, 10), (110, 30)]) {
+        expect(px(x, y), [0x20, 0x50, 0xA0], reason: '($x, $y)');
       }
-      expect(at(flat, 52, 15), [255, 255, 255]);
+      expect(px(54, 30), [255, 255, 255]);
+      expect(px(94, 20), [255, 255, 255]);
+    });
+
+    test('flattens a bright glow along the bottom edge, as on the Disney+ banner', () {
+      const w = 120, h = 60;
+      final data = ByteData(w * h * 4);
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final o = (y * w + x) * 4;
+          final glow = (y < 40 ? 0 : math.min(1.0, (y - 40) / 10)) * (1 - x / w) * 120;
+          final logo = x >= 50 && x < 70 && y >= 12 && y < 32;
+          data.setUint8(o, logo ? 255 : (10 + glow * 0.5).round());
+          data.setUint8(o + 1, logo ? 255 : (60 + glow).round());
+          data.setUint8(o + 2, logo ? 255 : (80 + glow).round());
+          data.setUint8(o + 3, 255);
+        }
+      }
+      final flat = bandFlattenBackground(data, w, fill)!;
+      List<int> px(int x, int y) => flat.sublist((y * w + x) * 4, (y * w + x) * 4 + 3);
+      for (final (x, y) in [(2, 58), (20, 50), (40, 45), (100, 57), (60, 5), (10, 10)]) {
+        expect(px(x, y), [0x20, 0x50, 0xA0], reason: '($x, $y)');
+      }
+      expect(px(60, 22), [255, 255, 255]);
     });
 
     test('leaves art with transparent edges (an icon) alone', () {
