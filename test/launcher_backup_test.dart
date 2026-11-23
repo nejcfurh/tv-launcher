@@ -139,14 +139,14 @@ void main() {
     expect(preferences.getStringList("reddit_subreddits"), ["EarthPorn", "SpacePorn"]);
     expect(preferences.getString("custom_app_label:b"), "EON TV");
     expect(preferences.containsKey("custom_app_label:c"), isFalse);
-    // Machine-local keys are neither exported nor overwritten.
-    expect(preferences.getString("unsplash_access_key"), "target-key");
+    // API credentials move with the setup; machine-local keys do not.
+    expect(preferences.getString("unsplash_access_key"), "source-key");
     expect(preferences.containsKey("custom_banner_b"), isFalse);
     expect(sourcePreferences.keys.where((key) => !isMachineLocalPreference(key)).toSet(),
         preferences.getKeys().where((key) => !isMachineLocalPreference(key)).toSet());
   });
 
-  test("export leaves out credentials and image paths", () async {
+  test("export carries API credentials and leaves out image paths", () async {
     await _seedSourcePreferences(preferences);
     await preferences.setString("reddit_client_secret", "secret");
     await preferences.setString("unsplash_author", "Someone");
@@ -157,8 +157,8 @@ void main() {
     expect(backup["format"], launcherBackupFormat);
     expect(backup["formatVersion"], launcherBackupFormatVersion);
     expect(exported, contains("custom_app_label:b"));
-    expect(exported, isNot(contains("unsplash_access_key")));
-    expect(exported, isNot(contains("reddit_client_secret")));
+    expect(exported, contains("unsplash_access_key"));
+    expect(exported, contains("reddit_client_secret"));
     expect(exported, isNot(contains("unsplash_author")));
     expect(exported, isNot(contains("custom_banner_b")));
   });

@@ -31,16 +31,14 @@ const int launcherBackupFormatVersion = 1;
 const String _customAppLabelPrefix = "custom_app_label:";
 
 // Left out of a backup and left alone by an import: paths into this TV's
-// private storage, the credit of the wallpaper on screen, and API credentials.
+// private storage and the credit of the wallpaper on screen. API credentials
+// are exported on purpose, so the backup file must be kept private.
 const List<String> _machineLocalPrefixes = ["custom_banner_"];
 const Set<String> _machineLocalKeys = {
   "unsplash_author",
   "reddit_current_title",
   "reddit_current_author",
   "reddit_current_subreddit",
-  "unsplash_access_key",
-  "reddit_client_id",
-  "reddit_client_secret",
 };
 
 bool isMachineLocalPreference(String key) =>
