@@ -134,7 +134,7 @@ void main() {
     expect(tester.getBottomLeft(band).dy, moreOrLessEquals(screenHeight - 24, epsilon: 1.5));
   });
 
-  testWidgets("Band tiles are identical, named, and the screen edges cut a half tile at each end", (tester) async {
+  testWidgets("Band tiles are identical, named, and the screen edges cut a half tile at each end that fades out", (tester) async {
     final appsService = mkAppService();
     final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
     final favorites = List.generate(
@@ -161,6 +161,16 @@ void main() {
     expect(left.right, greaterThan(0));
     expect(right.left, lessThan(screenWidth));
     expect(right.right, greaterThan(screenWidth));
+    // Each half fades out towards the screen edge that cuts it.
+    BandEdgePainter edgePainter(Key key) => tester
+        .widget<CustomPaint>(find.descendant(of: find.byKey(key), matching: find.byType(CustomPaint)))
+        .painter! as BandEdgePainter;
+    final leftPainter = edgePainter(const Key("dock_band_edge_0"));
+    final rightPainter = edgePainter(Key("dock_band_edge_${favorites.length + 1}"));
+    expect(left.left + leftPainter.clearAt, moreOrLessEquals(0));
+    expect(leftPainter.solidAt, greaterThan(leftPainter.clearAt));
+    expect(right.left + rightPainter.clearAt, moreOrLessEquals(screenWidth));
+    expect(rightPainter.solidAt, lessThan(rightPainter.clearAt));
     expect(geometry.slant, moreOrLessEquals(kBandTileHeight * tan(10 * pi / 180)));
   });
 

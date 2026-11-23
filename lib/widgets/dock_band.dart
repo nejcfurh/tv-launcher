@@ -419,7 +419,15 @@ class _DockBandState extends State<DockBand> {
               top: 0,
               width: geometry.boxWidth,
               height: kBandTileHeight,
-              child: CustomPaint(painter: _SliverPainter(geometry.slant)),
+              child: CustomPaint(
+                painter: BandEdgePainter(
+                  slant: geometry.slant,
+                  clearAt: slotIndex == 0
+                      ? -geometry.slotLeft(slotIndex)
+                      : geometry.width - geometry.slotLeft(slotIndex),
+                  solidAt: slotIndex == 0 ? geometry.boxWidth : 0,
+                ),
+              ),
             );
         final tiles = <Widget>[
           for (final (index, application) in widget.applications.indexed)
@@ -490,15 +498,26 @@ class _DockBandState extends State<DockBand> {
   }
 }
 
-class _SliverPainter extends CustomPainter {
+/// A half tile at a screen edge: clear where the screen cuts it ([clearAt], in its own
+/// coordinates), fading in to [kBandSliverColor] at [solidAt].
+class BandEdgePainter extends CustomPainter {
   final double slant;
+  final double clearAt;
+  final double solidAt;
 
-  const _SliverPainter(this.slant);
-
-  @override
-  void paint(Canvas canvas, Size size) =>
-      canvas.drawPath(bandTilePath(size, slant), Paint()..color = kBandSliverColor);
+  const BandEdgePainter({required this.slant, required this.clearAt, required this.solidAt});
 
   @override
-  bool shouldRepaint(covariant _SliverPainter old) => old.slant != slant;
+  void paint(Canvas canvas, Size size) {
+    final shader = ui.Gradient.linear(
+      Offset(clearAt, 0),
+      Offset(solidAt, 0),
+      [kBandSliverColor.withAlpha(0), kBandSliverColor],
+    );
+    canvas.drawPath(bandTilePath(size, slant), Paint()..shader = shader);
+  }
+
+  @override
+  bool shouldRepaint(covariant BandEdgePainter old) =>
+      old.slant != slant || old.clearAt != clearAt || old.solidAt != solidAt;
 }

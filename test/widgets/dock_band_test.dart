@@ -67,6 +67,25 @@ void main() {
     });
   });
 
+  group('BandEdgePainter', () {
+    testWidgets('fades from clear at the screen edge to the half tile colour', (tester) async {
+      late ByteData bytes;
+      await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder);
+        canvas.drawRect(const Rect.fromLTWH(0, 0, 120, 56), Paint()..color = Colors.white);
+        const BandEdgePainter(slant: 10, clearAt: 10, solidAt: 110).paint(canvas, const Size(120, 56));
+        final image = recorder.endRecording().toImageSync(120, 56);
+        bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+        image.dispose();
+      });
+      int redAt(int x) => bytes.getUint8((28 * 120 + x) * 4);
+      expect(redAt(10), greaterThan(250));
+      expect(redAt(60), inInclusiveRange(135, 155));
+      expect(redAt(108), lessThan(45));
+    });
+  });
+
   group('BandTilePainter', () {
     testWidgets('a focused tile is at full strength', (tester) async {
       late ui.Image art;
