@@ -24,6 +24,7 @@ import 'dart:typed_data';
 import 'package:flauncher/build_flags.dart';
 import 'package:flauncher/database.dart';
 import 'package:flauncher/flauncher.dart';
+import 'package:flauncher/widgets/app_card.dart';
 import 'package:flauncher/widgets/dock_band.dart';
 import 'package:flauncher/widgets/home_idle_dimmer.dart';
 import 'package:flauncher/flauncher_channel.dart';
@@ -819,6 +820,51 @@ void main() {
     expect(find.byType(SettingsPanel), findsNothing);
     final scrollable = tester.state<ScrollableState>(find.byType(Scrollable).first);
     expect(scrollable.position.pixels, scrollable.position.minScrollExtent);
+  });
+
+  testWidgets("HOME focuses the first dock tile, not the Watch Next row above it", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = List.generate(
+      4,
+      (i) => fakeApp(packageName: "me.efesser.flauncher.$i", name: "FLauncher $i", version: "1.0.0"),
+    );
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+    final settingsService = mkSettingsService();
+    when(settingsService.showWatchNextSection).thenReturn(true);
+    when(settingsService.watchNextBigPictureMode).thenReturn(false);
+    final watchNextService = mkWatchNextService();
+    final item = WatchNextItem(id: 1, title: "The Office", posterUri: "content://poster/1");
+    when(watchNextService.hasPermission).thenReturn(true);
+    when(watchNextService.items).thenReturn([item]);
+    when(watchNextService.hasItems).thenReturn(true);
+    when(watchNextService.hasVisibleSection).thenReturn(true);
+    // The Watch Next card's poster placeholder animates for ever, so settle by time.
+    Future<void> _settle(WidgetTester tester) async {
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 200));
+      }
+    }
+
+    await _pumpWidgetWithProviders(tester, mkWallpaperService(), appsService, settingsService, watchNextService);
+    await _settle(tester);
+
+    String? focusedApp() =>
+        FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<AppCard>()?.application.packageName;
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await _settle(tester);
+    expect(focusedApp(), "me.efesser.flauncher.2");
+
+    final reply = Completer<ByteData?>();
+    tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+      'me.efesser.flauncher/method',
+      const StandardMethodCodec().encodeMethodCall(const MethodCall('homePressed')),
+      reply.complete,
+    );
+    await _settle(tester);
+
+    expect(focusedApp(), "me.efesser.flauncher.0");
   });
 
   testWidgets("Pressing select on app launches app", (tester) async {

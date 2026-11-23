@@ -620,25 +620,26 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
           scrollPosition) continue;
       final renderObject = nodeContext.findRenderObject();
       if (renderObject is! RenderBox || !renderObject.attached) continue;
-      final origin = renderObject.localToGlobal(Offset.zero);
+      // Centres, not top-left corners: the focused dock tile grows about its centre, so its top
+      // edge sits above its neighbours'.
+      final origin = renderObject.localToGlobal(renderObject.size.center(Offset.zero));
+      bool before(Offset? other) =>
+          other == null || origin.dy < other.dy - 1 || ((origin.dy - other.dy).abs() <= 1 && origin.dx < other.dx);
       if (nodeContext.findAncestorWidgetOfExactType<WatchNextRow>() != null) {
-        if (watchNextOrigin == null ||
-            origin.dy < watchNextOrigin.dy ||
-            (origin.dy == watchNextOrigin.dy && origin.dx < watchNextOrigin.dx)) {
+        if (before(watchNextOrigin)) {
           firstWatchNext = node;
           watchNextOrigin = origin;
         }
       }
       if (nodeContext.findAncestorWidgetOfExactType<AppCard>() != null) {
-        if (appOrigin == null ||
-            origin.dy < appOrigin.dy ||
-            (origin.dy == appOrigin.dy && origin.dx < appOrigin.dx)) {
+        if (before(appOrigin)) {
           firstApp = node;
           appOrigin = origin;
         }
       }
     }
-    (firstWatchNext ?? firstApp)?.requestFocus();
+    // The first dock tile; Watch Next only when there is no app on the page.
+    (firstApp ?? firstWatchNext)?.requestFocus();
   }
 
   Future<void> _scrollDockToTop() async {
