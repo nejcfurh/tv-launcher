@@ -74,9 +74,11 @@ void main() {
       expect(find.descendant(of: network, matching: find.byType(InkWell)), findsNothing);
       expect(tester.getCenter(network).dx, greaterThan(tester.getCenter(find.byIcon(Icons.settings_outlined)).dx));
       expect(tester.getTopRight(network).dx, lessThan(tester.getTopLeft(find.byKey(const Key('statusbar_date'))).dx));
+      expect(tester.getTopLeft(network).dy, greaterThan(tester.getBottomLeft(find.byKey(const Key('statusbar_clock'))).dy),
+          reason: 'on the date line, under the time');
     });
 
-    testWidgets('date and time share a baseline and have no backdrop', (tester) async {
+    testWidgets('a large extra-light time with the date under it, buttons where they were, no backdrop', (tester) async {
       when(settingsService.showDateInStatusBar).thenReturn(true);
       await tester.pumpWidget(createTestWidget());
       await tester.pumpAndSettle();
@@ -85,22 +87,22 @@ void main() {
       final time = find.descendant(of: find.byKey(const Key('statusbar_clock')), matching: find.byType(Text));
       final dateStyle = tester.widget<Text>(date).style!;
       final timeStyle = tester.widget<Text>(time).style!;
-      expect(dateStyle.fontSize, 14);
-      expect(timeStyle.fontSize, 22);
+      expect(dateStyle.fontSize, 20);
+      expect(timeStyle.fontSize, 72);
+      expect(timeStyle.fontWeight, FontWeight.w200);
+      expect(timeStyle.fontFeatures, contains(const FontFeature.tabularFigures()));
+      expect(dateStyle.fontFeatures, contains(const FontFeature.tabularFigures()));
       expect(dateStyle.shadows, isNotEmpty);
       expect(timeStyle.shadows, isNotEmpty);
-      double baseline(Finder f) {
-        final text = tester.widget<Text>(f);
-        final painter = TextPainter(
-          text: TextSpan(text: text.data, style: DefaultTextStyle.of(tester.element(f)).style.merge(text.style)),
-          textDirection: TextDirection.ltr,
-          textScaler: MediaQuery.textScalerOf(tester.element(f)),
-        )..layout();
-        final distance = painter.computeDistanceToActualBaseline(TextBaseline.alphabetic);
-        painter.dispose();
-        return tester.getTopLeft(f).dy + distance;
-      }
-      expect(baseline(date), moreOrLessEquals(baseline(time), epsilon: 0.5));
+
+      final timeRect = tester.getRect(find.byKey(const Key('statusbar_clock')));
+      final dateRect = tester.getRect(find.byKey(const Key('statusbar_date')));
+      expect(timeRect.top, 12);
+      expect(dateRect.top, greaterThanOrEqualTo(timeRect.bottom), reason: 'the date is under the time');
+      expect(dateRect.right, timeRect.right, reason: 'both end on the right keyline');
+      expect(dateRect.bottom, lessThanOrEqualTo(kTopBarHeight));
+      expect(tester.getCenter(find.byIcon(Icons.settings_outlined)).dy, 32, reason: 'glyphs stay where they were');
+
       // Nothing with a visible fill sits behind the characters.
       bool visibleFill(Widget w) =>
           (w is ColoredBox && w.color.a > 0) ||
@@ -119,7 +121,7 @@ void main() {
       final opacity = tester.widget<AnimatedOpacity>(
         find.descendant(of: find.byType(FocusAwareAppBar), matching: find.byType(AnimatedOpacity)),
       );
-      expect(container.constraints?.maxHeight, kToolbarHeight);
+      expect(container.constraints?.maxHeight, kTopBarHeight);
       expect(opacity.opacity, 1.0);
     });
 
@@ -136,7 +138,7 @@ void main() {
       AnimatedOpacity opacity = tester.widget<AnimatedOpacity>(
         find.descendant(of: find.byType(FocusAwareAppBar), matching: find.byType(AnimatedOpacity)),
       );
-      expect(container.constraints?.maxHeight, kToolbarHeight);
+      expect(container.constraints?.maxHeight, kTopBarHeight);
       expect(opacity.opacity, 1.0);
 
       // User navigates down into the grid
@@ -164,7 +166,7 @@ void main() {
       opacity = tester.widget<AnimatedOpacity>(
         find.descendant(of: find.byType(FocusAwareAppBar), matching: find.byType(AnimatedOpacity)),
       );
-      expect(container.constraints?.maxHeight, kToolbarHeight);
+      expect(container.constraints?.maxHeight, kTopBarHeight);
       expect(opacity.opacity, 1.0);
     });
 
@@ -213,7 +215,7 @@ void main() {
       ignorePointer = tester.widget<IgnorePointer>(
         find.descendant(of: find.byType(FocusAwareAppBar), matching: find.byType(IgnorePointer)),
       );
-      expect(container.constraints?.maxHeight, kToolbarHeight);
+      expect(container.constraints?.maxHeight, kTopBarHeight);
       expect(opacity.opacity, 1.0);
       expect(ignorePointer.ignoring, isFalse);
     });
@@ -240,7 +242,7 @@ void main() {
       container = tester.widget<AnimatedContainer>(
         find.descendant(of: find.byType(FocusAwareAppBar), matching: find.byType(AnimatedContainer)),
       );
-      expect(container.constraints?.maxHeight, kToolbarHeight);
+      expect(container.constraints?.maxHeight, kTopBarHeight);
     });
   });
 }

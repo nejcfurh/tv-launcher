@@ -429,7 +429,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
                 0.0,
                 MediaQuery.of(context).size.height -
                     MediaQuery.of(context).padding.top -
-                    kToolbarHeight -
+                    kTopBarHeight -
                     (reserveWatchNextSpace ? watchNextSpace : 150),
               ),
             ),
@@ -459,7 +459,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     if (!hasDock) {
       return 64;
     }
-    return MediaQuery.of(context).size.height - MediaQuery.of(context).padding.top - kToolbarHeight;
+    return MediaQuery.of(context).size.height - MediaQuery.of(context).padding.top - kTopBarHeight;
   }
 
   List<Widget> _buildSectionSlivers(

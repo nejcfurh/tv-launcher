@@ -28,6 +28,7 @@ import 'package:flauncher/widgets/app_card_contour_painter.dart';
 import 'package:flauncher/widgets/application_info_panel.dart';
 import 'package:flauncher/widgets/dock_band.dart';
 import 'package:flauncher/widgets/dock_focus_ring.dart';
+import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/focus_keyboard_listener.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -612,7 +613,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
     const minDeltaToScroll = 24.0;
     if (onlyWhenNearBottom &&
         (position.axisDirection == AxisDirection.down || position.axisDirection == AxisDirection.up)) {
-      const topEdgePadding = kToolbarHeight + 24.0;
+      const topEdgePadding = kTopBarHeight + 24.0;
       const bottomEdgePadding = 96.0;
       final topTargetOffset = (viewport.getOffsetToReveal(renderObject, 0).offset - topEdgePadding).clamp(
         position.minScrollExtent,
