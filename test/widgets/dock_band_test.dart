@@ -115,6 +115,26 @@ void main() {
       expect(at(flat, 52, 15), [0x20, 0x50, 0xA0]);
     });
 
+    test('flattens a radial glow even when the logo runs into the edge for most of its height', () {
+      final data = ByteData(width * height * 4);
+      for (var y = 0; y < height; y++) {
+        for (var x = 0; x < width; x++) {
+          final o = (y * width + x) * 4;
+          final glow = 60 - ((x - 15) * (x - 15) + (y - 12) * (y - 12)) ~/ 30;
+          final logo = x >= 45 && y >= 5 && y < 25;
+          data.setUint8(o, logo ? 255 : 10 + glow ~/ 2);
+          data.setUint8(o + 1, logo ? 255 : 50 + glow);
+          data.setUint8(o + 2, logo ? 255 : 150 + glow);
+          data.setUint8(o + 3, 255);
+        }
+      }
+      final flat = bandFlattenBackground(data, width, fill)!;
+      for (final (x, y) in [(15, 12), (2, 28), (40, 15), (50, 2), (58, 28)]) {
+        expect(at(flat, x, y), [0x20, 0x50, 0xA0], reason: '($x, $y)');
+      }
+      expect(at(flat, 52, 15), [255, 255, 255]);
+    });
+
     test('leaves art with transparent edges (an icon) alone', () {
       expect(bandFlattenBackground(gradientWithLogo(edgeAlpha: 0), width, fill), isNull);
     });

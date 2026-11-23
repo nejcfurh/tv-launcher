@@ -148,9 +148,10 @@ int _histogramMedian(List<int> histogram, int count) {
 const kBandFlattenBackground = 28.0;
 const kBandFlattenLogo = 72.0;
 
-/// [rgba] with its background (the smooth gradient spanned by its edges) replaced by the single
-/// colour [fill], keeping the logo on top. Null when the art has transparent edges (an icon) or
-/// when less than half of it fits a smooth background (a photo), so those are left as they are.
+/// [rgba] with its background (a smooth gradient, fitted to the whole picture while ignoring the
+/// logo) replaced by the single colour [fill], keeping the logo on top. Null when the art has
+/// transparent edges (an icon) or when less than half of it fits a smooth background (a photo), so
+/// those are left as they are.
 Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
   final pixels = rgba.lengthInBytes ~/ 4;
   if (pixels == 0 || width < 2) return null;
@@ -159,66 +160,55 @@ Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
   final src = rgba.buffer.asUint8List(rgba.offsetInBytes, pixels * 4);
   final bandX = math.max(1, (width * 0.05).ceil());
   final bandY = math.max(1, (height * 0.05).ceil());
-
-  // Mean colour of the outer band along each side: top/bottom per column, left/right per row.
-  List<List<double>> profile(int length, int depth, int Function(int along, int across) offset) {
-    final out = <List<double>>[];
-    for (var i = 0; i < length; i++) {
-      var r = 0.0, g = 0.0, b = 0.0;
-      for (var d = 0; d < depth; d++) {
-        final o = offset(i, d);
-        r += src[o];
-        g += src[o + 1];
-        b += src[o + 2];
-      }
-      out.add([r / depth, g / depth, b / depth]);
-    }
-    // A running median along the edge, so a logo that touches it for a short stretch does not
-    // bend the background model there.
-    final radius = math.max(2, (length * 0.1).round());
-    double median(int i, int c) {
-      final window = [
-        for (var j = math.max(0, i - radius); j < math.min(length, i + radius + 1); j++) out[j][c],
-      ]..sort();
-      return window[window.length ~/ 2];
-    }
-
-    return [
-      for (var i = 0; i < length; i++) [median(i, 0), median(i, 1), median(i, 2)],
-    ];
-  }
-
   for (var y = 0; y < height; y++) {
     for (var x = 0; x < width; x++) {
       final onEdge = y < bandY || y >= height - bandY || x < bandX || x >= width - bandX;
       if (onEdge && src[(y * width + x) * 4 + 3] < 128) return null;
     }
   }
-  final top = profile(width, bandY, (x, d) => (d * width + x) * 4);
-  final bottom = profile(width, bandY, (x, d) => ((height - 1 - d) * width + x) * 4);
-  final left = profile(height, bandX, (y, d) => (y * width + d) * 4);
-  final right = profile(height, bandX, (y, d) => (y * width + width - 1 - d) * 4);
+
+  // Quadratic surface per channel over (u, v) in 0–1, refitted to the pixels closest to it: first
+  // the better half (the logo is the minority, so it drops out), then all within reach.
+  List<double> basis(double u, double v) => [1, u, v, u * u, u * v, v * v];
+  final step = math.max(1, math.sqrt(pixels / 4000).floor());
+  final samples = <(List<double>, int)>[
+    for (var y = 0; y < height; y += step)
+      for (var x = 0; x < width; x += step) (basis(x / (width - 1), y / (height - 1)), (y * width + x) * 4),
+  ];
+  var inliers = List.filled(samples.length, true);
+  late List<List<double>> coefficients;
+  double distance(List<double> b, int o) {
+    var d2 = 0.0;
+    for (var c = 0; c < 3; c++) {
+      var model = 0.0;
+      for (var k = 0; k < 6; k++) {
+        model += coefficients[c][k] * b[k];
+      }
+      final delta = src[o + c] - model;
+      d2 += delta * delta;
+    }
+    return math.sqrt(d2);
+  }
+
+  for (var round = 0; round < 6; round++) {
+    final fitted = _fitQuadratic(samples, inliers, src);
+    if (fitted == null) return null;
+    coefficients = fitted;
+    if (round == 5) break;
+    final distances = [for (final (b, o) in samples) distance(b, o)];
+    final median = ([...distances]..sort())[distances.length ~/ 2];
+    final cutoff = round < 3 ? median : math.max(kBandFlattenBackground, 2.5 * median);
+    inliers = [for (final d in distances) d <= cutoff];
+  }
 
   final fr = (fill.r * 255).round(), fg = (fill.g * 255).round(), fb = (fill.b * 255).round();
   final out = Uint8List(pixels * 4);
   var background = 0;
   for (var y = 0; y < height; y++) {
-    final v = y / (height - 1);
     for (var x = 0; x < width; x++) {
-      final u = x / (width - 1);
       final o = (y * width + x) * 4;
-      var distance2 = 0.0;
-      for (var c = 0; c < 3; c++) {
-        // Coons patch: the surface that runs through all four edge profiles.
-        final model = (1 - u) * left[y][c] + u * right[y][c] + (1 - v) * top[x][c] + v * bottom[x][c] -
-            ((1 - u) * (1 - v) * top[0][c] +
-                u * (1 - v) * top[width - 1][c] +
-                (1 - u) * v * bottom[0][c] +
-                u * v * bottom[width - 1][c]);
-        final delta = src[o + c] - model;
-        distance2 += delta * delta;
-      }
-      final t = ((math.sqrt(distance2) - kBandFlattenBackground) / (kBandFlattenLogo - kBandFlattenBackground))
+      final t = ((distance(basis(x / (width - 1), y / (height - 1)), o) - kBandFlattenBackground) /
+              (kBandFlattenLogo - kBandFlattenBackground))
           .clamp(0.0, 1.0);
       final logo = t * t * (3 - 2 * t);
       if (logo < 0.5) background++;
@@ -229,6 +219,69 @@ Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
     }
   }
   return background * 2 >= pixels ? out : null;
+}
+
+/// Least squares fit of the six quadratic terms to the RGB of the [inliers] among [samples]:
+/// one coefficient list per channel, or null when too few samples are left to fit.
+List<List<double>>? _fitQuadratic(List<(List<double>, int)> samples, List<bool> inliers, Uint8List src) {
+  final a = List.generate(6, (_) => List.filled(6, 0.0));
+  final rhs = List.generate(3, (_) => List.filled(6, 0.0));
+  var used = 0;
+  for (var i = 0; i < samples.length; i++) {
+    if (!inliers[i]) continue;
+    final (b, o) = samples[i];
+    used++;
+    for (var r = 0; r < 6; r++) {
+      for (var c = 0; c < 6; c++) {
+        a[r][c] += b[r] * b[c];
+      }
+      for (var ch = 0; ch < 3; ch++) {
+        rhs[ch][r] += b[r] * src[o + ch];
+      }
+    }
+  }
+  if (used < 12) return null;
+  // Gaussian elimination with partial pivoting, all three channels at once.
+  for (var col = 0; col < 6; col++) {
+    var pivot = col;
+    for (var r = col + 1; r < 6; r++) {
+      if (a[r][col].abs() > a[pivot][col].abs()) pivot = r;
+    }
+    if (a[pivot][col].abs() < 1e-9) return null;
+    if (pivot != col) {
+      final row = a[col];
+      a[col] = a[pivot];
+      a[pivot] = row;
+      for (final v in rhs) {
+        final t = v[col];
+        v[col] = v[pivot];
+        v[pivot] = t;
+      }
+    }
+    for (var r = col + 1; r < 6; r++) {
+      final f = a[r][col] / a[col][col];
+      for (var c = col; c < 6; c++) {
+        a[r][c] -= f * a[col][c];
+      }
+      for (final v in rhs) {
+        v[r] -= f * v[col];
+      }
+    }
+  }
+  return [
+    for (final v in rhs)
+      () {
+        final x = List.filled(6, 0.0);
+        for (var r = 5; r >= 0; r--) {
+          var sum = v[r];
+          for (var c = r + 1; c < 6; c++) {
+            sum -= a[r][c] * x[c];
+          }
+          x[r] = sum / a[r][r];
+        }
+        return x;
+      }(),
+  ];
 }
 
 /// Paints one band tile: the art's logo in the middle, its edge pixels stretched out to fill the
