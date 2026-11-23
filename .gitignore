@@ -102,3 +102,6 @@ android/fastlane/README.md
 
 # Personal build switches (passed with --dart-define-from-file); never committed.
 /dart_defines.local.json
+
+# Launcher setup backups hold the Unsplash and Reddit API keys; never committed.
+tv-launcher-backup*.json
