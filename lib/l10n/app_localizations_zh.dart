@@ -794,4 +794,52 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get brightnessSlotNight => '夜间 10 点 - 早上 6 点';
+
+  @override
+  String get exportLauncherSetup => '导出启动器设置';
+
+  @override
+  String get importLauncherSetup => '导入启动器设置';
+
+  @override
+  String exportLauncherSetupDone(String path) {
+    return '已保存到 $path。请用 adb pull 和 adb push 复制到新电视。';
+  }
+
+  @override
+  String get importLauncherSetupConfirm => '用备份替换此电视上的主屏幕布局和启动器设置？';
+
+  @override
+  String get importLauncherSetupConfirmButton => '导入';
+
+  @override
+  String importLauncherSetupDone(int categories, int spacers) {
+    return '已恢复。分类：$categories，间隔：$spacers。';
+  }
+
+  @override
+  String importLauncherSetupSkipped(String packages) {
+    return '未安装，已跳过：$packages。安装后再次导入即可放回原位。';
+  }
+
+  @override
+  String importLauncherSetupAdded(String packages) {
+    return '备份中没有，已添加到所有应用：$packages';
+  }
+
+  @override
+  String launcherBackupNotFound(String path) {
+    return '在 $path 未找到备份。';
+  }
+
+  @override
+  String get launcherBackupInvalid => '无法读取备份文件。';
+
+  @override
+  String get launcherBackupNewerVersion => '此备份来自更新版本的 TV Launcher，请先更新此启动器。';
+
+  @override
+  String launcherBackupFailed(String error) {
+    return '备份失败：$error';
+  }
 }

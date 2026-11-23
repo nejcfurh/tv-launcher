@@ -370,5 +370,62 @@
           "type": "String"
         }
       }
+    },
+    "exportLauncherSetup": "Export launcher setup",
+    "importLauncherSetup": "Import launcher setup",
+    "exportLauncherSetupDone": "Saved to {path}. Copy it to the new TV with adb pull and adb push.",
+    "importLauncherSetupConfirm": "Replace the home screen layout and launcher settings on this TV with the backup?",
+    "importLauncherSetupConfirmButton": "Import",
+    "importLauncherSetupDone": "Restored. Categories: {categories}, spacers: {spacers}.",
+    "importLauncherSetupSkipped": "Not installed, skipped: {packages}. Install them and import again to place them.",
+    "importLauncherSetupAdded": "Not in the backup, added to All Apps: {packages}",
+    "launcherBackupNotFound": "No backup found at {path}.",
+    "launcherBackupInvalid": "The backup file cannot be read.",
+    "launcherBackupNewerVersion": "The backup comes from a newer version of TV Launcher. Update this launcher first.",
+    "launcherBackupFailed": "Backup failed: {error}",
+    "@exportLauncherSetupDone": {
+      "placeholders": {
+        "path": {
+          "type": "String"
+        }
+      }
+    },
+    "@importLauncherSetupDone": {
+      "placeholders": {
+        "categories": {
+          "type": "int"
+        },
+        "spacers": {
+          "type": "int"
+        }
+      }
+    },
+    "@importLauncherSetupSkipped": {
+      "placeholders": {
+        "packages": {
+          "type": "String"
+        }
+      }
+    },
+    "@importLauncherSetupAdded": {
+      "placeholders": {
+        "packages": {
+          "type": "String"
+        }
+      }
+    },
+    "@launcherBackupNotFound": {
+      "placeholders": {
+        "path": {
+          "type": "String"
+        }
+      }
+    },
+    "@launcherBackupFailed": {
+      "placeholders": {
+        "error": {
+          "type": "String"
+        }
+      }
     }
 }

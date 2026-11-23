@@ -260,5 +260,17 @@
     "redditSubredditAdded": "Subreddit añadido",
     "redditSubredditInvalid": "Introduce un nombre de subreddit válido",
     "redditWallpaperUpdated": "Fondo de pantalla actualizado con éxito",
-    "redditWallpaperFailed": "Error al obtener el fondo. Si persiste, añade un ID de cliente de Reddit en los ajustes."
+    "redditWallpaperFailed": "Error al obtener el fondo. Si persiste, añade un ID de cliente de Reddit en los ajustes.",
+    "exportLauncherSetup": "Exportar configuración del launcher",
+    "importLauncherSetup": "Importar configuración del launcher",
+    "exportLauncherSetupDone": "Guardado en {path}. Cópialo al nuevo televisor con adb pull y adb push.",
+    "importLauncherSetupConfirm": "¿Reemplazar el diseño de la pantalla de inicio y los ajustes del launcher de este televisor con la copia de seguridad?",
+    "importLauncherSetupConfirmButton": "Importar",
+    "importLauncherSetupDone": "Restaurado. Categorías: {categories}, espaciadores: {spacers}.",
+    "importLauncherSetupSkipped": "No instaladas, omitidas: {packages}. Instálalas e importa de nuevo para colocarlas.",
+    "importLauncherSetupAdded": "No están en la copia, añadidas a Todas las apps: {packages}",
+    "launcherBackupNotFound": "No hay copia de seguridad en {path}.",
+    "launcherBackupInvalid": "No se puede leer el archivo de copia de seguridad.",
+    "launcherBackupNewerVersion": "La copia proviene de una versión más reciente de TV Launcher. Actualiza este launcher primero.",
+    "launcherBackupFailed": "Error en la copia de seguridad: {error}"
 }

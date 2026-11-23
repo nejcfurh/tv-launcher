@@ -25,6 +25,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart';
 import 'package:flauncher/database.dart';
 import 'package:flauncher/flauncher_channel.dart';
+import 'package:flauncher/launcher_backup.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/widgets.dart';
 
@@ -272,6 +273,15 @@ class AppsService extends ChangeNotifier
         }
       }
     });
+  }
+
+  Future<File> exportBackup(Directory directory) async =>
+      writeLauncherBackupFile(directory, _database, await _prefsAsync);
+
+  Future<LauncherImportReport> importBackup(Directory directory) async {
+    final report = await importLauncherBackupFile(directory, _database, await _prefsAsync);
+    await _refreshState();
+    return report;
   }
 
   Future<void> _refreshState({bool shouldNotifyListeners = true}) async {
