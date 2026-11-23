@@ -57,6 +57,53 @@ void main() {
     });
   });
 
+  group('bandFlattenBackground', () {
+    const width = 60, height = 30;
+    const fill = Color(0xFF2050A0);
+
+    /// A left-to-right blue gradient with a white block (the "logo") in the middle.
+    ByteData gradientWithLogo({int edgeAlpha = 255}) {
+      final data = ByteData(width * height * 4);
+      for (var y = 0; y < height; y++) {
+        for (var x = 0; x < width; x++) {
+          final o = (y * width + x) * 4;
+          final logo = x >= 25 && x < 35 && y >= 10 && y < 20;
+          final edge = x == 0 || y == 0 || x == width - 1 || y == height - 1;
+          data.setUint8(o, logo ? 255 : 10 + x);
+          data.setUint8(o + 1, logo ? 255 : 40 + x);
+          data.setUint8(o + 2, logo ? 255 : 120 + 2 * x);
+          data.setUint8(o + 3, edge ? edgeAlpha : 255);
+        }
+      }
+      return data;
+    }
+
+    List<int> at(Uint8List rgba, int x, int y) => rgba.sublist((y * width + x) * 4, (y * width + x) * 4 + 3);
+
+    test('turns a gradient background into one colour and keeps the logo', () {
+      final flat = bandFlattenBackground(gradientWithLogo(), width, fill)!;
+      expect(at(flat, 2, 5), [0x20, 0x50, 0xA0]);
+      expect(at(flat, 57, 25), [0x20, 0x50, 0xA0]);
+      expect(at(flat, 30, 15), [255, 255, 255]);
+    });
+
+    test('leaves art with transparent edges (an icon) alone', () {
+      expect(bandFlattenBackground(gradientWithLogo(edgeAlpha: 0), width, fill), isNull);
+    });
+
+    test('leaves art that is not mostly a smooth background (a photo) alone', () {
+      final data = ByteData(width * height * 4);
+      for (var i = 0; i < width * height; i++) {
+        final v = (i * 97) % 256;
+        data.setUint8(i * 4, v);
+        data.setUint8(i * 4 + 1, 255 - v);
+        data.setUint8(i * 4 + 2, (v * 3) % 256);
+        data.setUint8(i * 4 + 3, 255);
+      }
+      expect(bandFlattenBackground(data, width, fill), isNull);
+    });
+  });
+
   group('BandGeometry', () {
     test('tiles plus a half at each edge fill the width exactly, at a 10 degree lean', () {
       const geometry = BandGeometry(960, 8);

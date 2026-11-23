@@ -132,6 +132,82 @@ Path bandTilePath(Size size, double slant) => Path()
   return (edge: edge, luma: lumaSum / lumaN);
 }
 
+/// How far (RGB distance, 0–441) a pixel may sit from the art's smooth background and still
+/// count as background; beyond [kBandFlattenLogo] it is all logo, with a soft blend between.
+const kBandFlattenBackground = 28.0;
+const kBandFlattenLogo = 72.0;
+
+/// [rgba] with its background (the smooth gradient spanned by its edges) replaced by the single
+/// colour [fill], keeping the logo on top. Null when the art has transparent edges (an icon) or
+/// when less than half of it fits a smooth background (a photo), so those are left as they are.
+Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
+  final pixels = rgba.lengthInBytes ~/ 4;
+  if (pixels == 0 || width < 2) return null;
+  final height = pixels ~/ width;
+  if (height < 2) return null;
+  final src = rgba.buffer.asUint8List(rgba.offsetInBytes, pixels * 4);
+  final bandX = math.max(1, (width * 0.05).ceil());
+  final bandY = math.max(1, (height * 0.05).ceil());
+
+  // Mean colour of the outer band along each side: top/bottom per column, left/right per row.
+  List<List<double>> profile(int length, int depth, int Function(int along, int across) offset) {
+    final out = <List<double>>[];
+    for (var i = 0; i < length; i++) {
+      var r = 0.0, g = 0.0, b = 0.0;
+      for (var d = 0; d < depth; d++) {
+        final o = offset(i, d);
+        r += src[o];
+        g += src[o + 1];
+        b += src[o + 2];
+      }
+      out.add([r / depth, g / depth, b / depth]);
+    }
+    return out;
+  }
+
+  for (var y = 0; y < height; y++) {
+    for (var x = 0; x < width; x++) {
+      final onEdge = y < bandY || y >= height - bandY || x < bandX || x >= width - bandX;
+      if (onEdge && src[(y * width + x) * 4 + 3] < 128) return null;
+    }
+  }
+  final top = profile(width, bandY, (x, d) => (d * width + x) * 4);
+  final bottom = profile(width, bandY, (x, d) => ((height - 1 - d) * width + x) * 4);
+  final left = profile(height, bandX, (y, d) => (y * width + d) * 4);
+  final right = profile(height, bandX, (y, d) => (y * width + width - 1 - d) * 4);
+
+  final fr = (fill.r * 255).round(), fg = (fill.g * 255).round(), fb = (fill.b * 255).round();
+  final out = Uint8List(pixels * 4);
+  var background = 0;
+  for (var y = 0; y < height; y++) {
+    final v = y / (height - 1);
+    for (var x = 0; x < width; x++) {
+      final u = x / (width - 1);
+      final o = (y * width + x) * 4;
+      var distance2 = 0.0;
+      for (var c = 0; c < 3; c++) {
+        // Coons patch: the surface that runs through all four edge profiles.
+        final model = (1 - u) * left[y][c] + u * right[y][c] + (1 - v) * top[x][c] + v * bottom[x][c] -
+            ((1 - u) * (1 - v) * top[0][c] +
+                u * (1 - v) * top[width - 1][c] +
+                (1 - u) * v * bottom[0][c] +
+                u * v * bottom[width - 1][c]);
+        final delta = src[o + c] - model;
+        distance2 += delta * delta;
+      }
+      final t = ((math.sqrt(distance2) - kBandFlattenBackground) / (kBandFlattenLogo - kBandFlattenBackground))
+          .clamp(0.0, 1.0);
+      final logo = t * t * (3 - 2 * t);
+      if (logo < 0.5) background++;
+      out[o] = (fr + (src[o] - fr) * logo).round();
+      out[o + 1] = (fg + (src[o + 1] - fg) * logo).round();
+      out[o + 2] = (fb + (src[o + 2] - fb) * logo).round();
+      out[o + 3] = 255;
+    }
+  }
+  return background * 2 >= pixels ? out : null;
+}
+
 /// Paints one band tile: the art's logo in the middle, its edge pixels stretched out to fill the
 /// parallelogram, muted unless [focused]. A focused tile gets a shadow and a dark cut-out.
 class BandTilePainter extends CustomPainter {
@@ -274,19 +350,27 @@ class _BandTileFaceState extends State<BandTileFace> {
     final image = info.image.clone();
     info.dispose();
     ({Color edge, double luma})? colours;
+    var art = image;
     try {
       final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
       colours = bytes == null ? null : bandArtColours(bytes, image.width);
+      final flat = bytes == null || colours == null ? null : bandFlattenBackground(bytes, image.width, colours.edge);
+      if (flat != null) {
+        final completer = Completer<ui.Image>();
+        ui.decodeImageFromPixels(flat, image.width, image.height, ui.PixelFormat.rgba8888, completer.complete);
+        art = await completer.future;
+        image.dispose();
+      }
     } catch (_) {
       colours = null;
     }
     if (!mounted || generation != _generation) {
-      image.dispose();
+      art.dispose();
       return;
     }
     setState(() {
       _image?.dispose();
-      _image = image;
+      _image = art;
       _edge = colours?.edge ?? kBandPlainTileColor;
       _bright = (colours?.luma ?? 0) >= kBandBrightLuma;
     });
@@ -469,7 +553,10 @@ class _DockBandState extends State<DockBand> {
         ];
         final focused = _focusedIndex;
         if (focused != null && focused < tiles.length) tiles.add(tiles.removeAt(focused));
-        return Stack(clipBehavior: Clip.hardEdge, children: [sliver(0), sliver(_count + 1), ...tiles]);
+        return ClipRect(
+          clipper: const BandSideClipper(),
+          child: Stack(clipBehavior: Clip.none, children: [sliver(0), sliver(_count + 1), ...tiles]),
+        );
       }),
     );
   }
@@ -496,6 +583,18 @@ class _DockBandState extends State<DockBand> {
   void _onMoveEnd(BuildContext context) {
     context.read<AppsService>().saveApplicationOrderInCategory(widget.category);
   }
+}
+
+/// Cuts the band at the screen's sides only, so the focused tile can grow, and cast its shadow,
+/// above the band's top edge.
+class BandSideClipper extends CustomClipper<Rect> {
+  const BandSideClipper();
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(0, -kBandTileHeight, size.width, size.height + kBandTileHeight);
+
+  @override
+  bool shouldReclip(covariant BandSideClipper oldClipper) => false;
 }
 
 /// A half tile at a screen edge: clear where the screen cuts it ([clearAt], in its own

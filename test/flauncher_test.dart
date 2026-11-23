@@ -309,6 +309,21 @@ void main() {
     expect(full("me.efesser.one"), isFalse);
     expect(full("me.efesser.two"), isTrue);
     expect(tileScale("me.efesser.two"), kBandFocusedScale);
+
+    // It grows above the band's top as much as below, and the band does not cut that off.
+    final band = tester.getRect(find.byKey(const Key("dock_band")));
+    final face = tester.getRect(
+        find.descendant(of: findAppCard("me.efesser.two"), matching: find.byType(BandTileFace)));
+    final growth = kBandTileHeight * (kBandFocusedScale - 1) / 2;
+    expect(face.top, moreOrLessEquals(band.top - growth));
+    expect(face.bottom, moreOrLessEquals(band.top + kBandTileHeight + growth));
+    final clip = tester
+        .widget<ClipRect>(find.descendant(of: find.byKey(const Key("dock_band")), matching: find.byType(ClipRect)).first)
+        .clipper!
+        .getClip(band.size);
+    expect(band.top + clip.top, lessThan(face.top - 3 - 10)); // cut-out stroke and shadow too
+    expect(clip.left, 0);
+    expect(clip.right, band.width);
   });
 
   testWidgets("Right from the last band tile goes to the first, Left from the first to the last", (tester) async {
