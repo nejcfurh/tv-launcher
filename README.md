@@ -8,10 +8,9 @@ The goal is a quiet home screen: one band of the apps you actually use, a full-s
 "Watch Next" banner above it, and nothing else. No ads, no recommendations rows, no
 store tiles.
 
-![TV Launcher home screen: top bar with settings, Wi-Fi, Play Store, browser and VLC shortcuts, the date and time, an Unsplash wallpaper, and a dock of eight apps at the bottom](docs/images/tv-launcher-home.jpg)
+![TV Launcher home screen: settings, Play Store, browser and VLC shortcuts at the top left, a large clock with the date at the top right, a full-screen Watch Next banner for an episode on Disney+, and the app band at the bottom with the first app selected](docs/images/tv-launcher-home.jpg)
 
-<sub>Home screen with the Watch Next banner turned off, on an Unsplash wallpaper. The
-screenshot shows the earlier dock row, not the app band.</sub>
+<sub>Home screen with the Watch Next banner showing an episode from Disney+.</sub>
 
 > TV Launcher is a fork. Almost everything that makes it work — the Watch Next
 > integration, the dock, wallpapers, settings and the overall architecture — comes from
@@ -211,6 +210,7 @@ TV Launcher stands on a chain of open-source launchers:
 The HBO, YouTube and Apple TV logo shapes come from [Simple Icons](https://simpleicons.org)
 (CC0). The VLC cone in the top bar is based on Simple Icons' VLC shape.
 
-Wallpaper in the screenshot: photo by Ganapathy Kumar on [Unsplash](https://unsplash.com).
+The picture in the screenshot is a still from *New Girl*, supplied by the Disney+ app
+through Watch Next. It belongs to its rights holders.
 
 TV Launcher changes by [Nejc Furh](https://nejcfurh.dev).
