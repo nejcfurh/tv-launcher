@@ -145,6 +145,13 @@ int _histogramMedian(List<int> histogram, int count) {
   return histogram.length - 1;
 }
 
+/// Apps whose tile is repainted in two colours: the art's background becomes [background] and its
+/// logo [logo]. Netflix ships a white banner with a red wordmark; on the band it reads as red.
+typedef BandDuotone = ({Color background, Color logo});
+const kBandArtDuotones = <String, BandDuotone>{
+  'com.netflix.ninja': (background: Color(0xFFE50914), logo: Color(0xFFFFFFFF)),
+};
+
 /// How far (RGB distance, 0–441) a pixel may sit from the art's smooth background and still
 /// count as background; beyond [kBandFlattenLogo] it is all logo, with a soft blend between.
 const kBandFlattenBackground = 28.0;
@@ -153,8 +160,9 @@ const kBandFlattenLogo = 72.0;
 /// [rgba] with its background (a gradient or glow, fitted as a smooth surface to the whole picture
 /// while ignoring the logo) replaced by the single colour [fill], keeping the logo on top. Null when the art has
 /// transparent edges (an icon) or when less than half of it fits a smooth background (a photo), so
-/// those are left as they are.
-Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
+/// those are left as they are. With [duotone], the background becomes its background colour and
+/// the logo its logo colour (in place of [fill] and the logo's own pixels).
+Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill, {BandDuotone? duotone}) {
   final pixels = rgba.lengthInBytes ~/ 4;
   if (pixels == 0 || width < 2) return null;
   final height = pixels ~/ width;
@@ -226,7 +234,14 @@ Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
     inliers = [for (final d in distances) d <= cutoff];
   }
 
-  final fr = (fill.r * 255).round(), fg = (fill.g * 255).round(), fb = (fill.b * 255).round();
+  final backgroundColour = duotone?.background ?? fill;
+  final fr = (backgroundColour.r * 255).round(),
+      fg = (backgroundColour.g * 255).round(),
+      fb = (backgroundColour.b * 255).round();
+  final logoColour = duotone?.logo;
+  final lr = logoColour == null ? 0 : (logoColour.r * 255).round();
+  final lg = logoColour == null ? 0 : (logoColour.g * 255).round();
+  final lb = logoColour == null ? 0 : (logoColour.b * 255).round();
   final out = Uint8List(pixels * 4);
   var background = 0;
   for (var y = 0; y < height; y++) {
@@ -237,17 +252,17 @@ Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
           .clamp(0.0, 1.0);
       final logo = t * t * (3 - 2 * t);
       if (logo < 0.5) background++;
-      out[o] = (fr + (src[o] - fr) * logo).round();
-      out[o + 1] = (fg + (src[o + 1] - fg) * logo).round();
-      out[o + 2] = (fb + (src[o + 2] - fb) * logo).round();
+      out[o] = (fr + ((logoColour == null ? src[o] : lr) - fr) * logo).round();
+      out[o + 1] = (fg + ((logoColour == null ? src[o + 1] : lg) - fg) * logo).round();
+      out[o + 2] = (fb + ((logoColour == null ? src[o + 2] : lb) - fb) * logo).round();
       out[o + 3] = 255;
     }
   }
   return background * 2 >= pixels ? out : null;
 }
 
-Uint8List? _flattenJob(({ByteData bytes, int width, Color fill}) job) =>
-    bandFlattenBackground(job.bytes, job.width, job.fill);
+Uint8List? _flattenJob(({ByteData bytes, int width, Color fill, BandDuotone? duotone}) job) =>
+    bandFlattenBackground(job.bytes, job.width, job.fill, duotone: job.duotone);
 
 /// Mean colour of the [depth] pixels in from one edge at each point along it, then a running
 /// median along the edge, so a logo that touches it for a short stretch does not bend it.
@@ -438,10 +453,13 @@ class BandTilePainter extends CustomPainter {
       old.slant != slant;
 }
 
-/// Where the logo goes in a tile of [size]: centred, at most 60% of the tile's height, and short of
-/// the slanted sides.
+/// How much of a tile's height its logo (the whole banner or icon) may take.
+const kBandLogoHeightFraction = 0.75;
+
+/// Where the logo goes in a tile of [size]: centred, at most [kBandLogoHeightFraction] of the
+/// tile's height, and short of the slanted sides.
 Rect bandLogoRect(Size size, double slant, Size art) {
-  var height = size.height * 0.6;
+  var height = size.height * kBandLogoHeightFraction;
   var width = height * art.width / art.height;
   final maxWidth = size.width - 2 * slant - 12;
   if (width > maxWidth) {
@@ -462,6 +480,9 @@ class BandTileFace extends StatefulWidget {
   /// For tiles without art (the "All apps" tile).
   final Color? plainColour;
 
+  /// Repaints the art in two colours (see [kBandArtDuotones]).
+  final BandDuotone? duotone;
+
   const BandTileFace({
     super.key,
     required this.image,
@@ -469,6 +490,7 @@ class BandTileFace extends StatefulWidget {
     required this.slant,
     this.child,
     this.plainColour,
+    this.duotone,
   });
 
   @override
@@ -521,8 +543,12 @@ class _BandTileFaceState extends State<BandTileFace> {
       // Up to ~0.1 s per banner, so off the UI thread.
       final flat = bytes == null || colours == null
           ? null
-          : await compute(_flattenJob, (bytes: bytes, width: image.width, fill: colours.edge));
+          : await compute(
+              _flattenJob, (bytes: bytes, width: image.width, fill: colours.edge, duotone: widget.duotone));
       if (flat != null) {
+        if (widget.duotone case final duotone?) {
+          colours = (edge: duotone.background, luma: duotone.background.computeLuminance());
+        }
         final completer = Completer<ui.Image>();
         ui.decodeImageFromPixels(flat, image.width, image.height, ui.PixelFormat.rgba8888, completer.complete);
         art = await completer.future;
