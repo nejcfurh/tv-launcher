@@ -1585,6 +1585,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'10 PM - 6 AM'**
   String get brightnessSlotNight;
+
+  /// No description provided for @exportLauncherSetup.
+  ///
+  /// In en, this message translates to:
+  /// **'Export launcher setup'**
+  String get exportLauncherSetup;
+
+  /// No description provided for @importLauncherSetup.
+  ///
+  /// In en, this message translates to:
+  /// **'Import launcher setup'**
+  String get importLauncherSetup;
+
+  /// No description provided for @exportLauncherSetupDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to {path}. Copy it to the new TV with adb pull and adb push.'**
+  String exportLauncherSetupDone(String path);
+
+  /// No description provided for @importLauncherSetupConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the home screen layout and launcher settings on this TV with the backup?'**
+  String get importLauncherSetupConfirm;
+
+  /// No description provided for @importLauncherSetupConfirmButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get importLauncherSetupConfirmButton;
+
+  /// No description provided for @importLauncherSetupDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored. Categories: {categories}, spacers: {spacers}.'**
+  String importLauncherSetupDone(int categories, int spacers);
+
+  /// No description provided for @importLauncherSetupSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'Not installed, skipped: {packages}. Install them and import again to place them.'**
+  String importLauncherSetupSkipped(String packages);
+
+  /// No description provided for @importLauncherSetupAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Not in the backup, added to All Apps: {packages}'**
+  String importLauncherSetupAdded(String packages);
+
+  /// No description provided for @launcherBackupNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No backup found at {path}.'**
+  String launcherBackupNotFound(String path);
+
+  /// No description provided for @launcherBackupInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup file cannot be read.'**
+  String get launcherBackupInvalid;
+
+  /// No description provided for @launcherBackupNewerVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup comes from a newer version of TV Launcher. Update this launcher first.'**
+  String get launcherBackupNewerVersion;
+
+  /// No description provided for @launcherBackupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup failed: {error}'**
+  String launcherBackupFailed(String error);
 }
 
 class _AppLocalizationsDelegate

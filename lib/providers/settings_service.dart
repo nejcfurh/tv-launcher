@@ -218,6 +218,9 @@ class SettingsService extends ChangeNotifier {
     }
   }
 
+  /// Tells listeners that preferences were written outside this service.
+  void reload() => notifyListeners();
+
   Future<void> set(String key, bool value) async {
     await _sharedPreferences.setBool(key, value);
     notifyListeners();

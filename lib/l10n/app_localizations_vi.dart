@@ -817,4 +817,54 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get brightnessSlotNight => '22:00–6:00';
+
+  @override
+  String get exportLauncherSetup => 'Xuất thiết lập launcher';
+
+  @override
+  String get importLauncherSetup => 'Nhập thiết lập launcher';
+
+  @override
+  String exportLauncherSetupDone(String path) {
+    return 'Đã lưu vào $path. Sao chép sang TV mới bằng adb pull và adb push.';
+  }
+
+  @override
+  String get importLauncherSetupConfirm =>
+      'Thay bố cục màn hình chính và cài đặt launcher trên TV này bằng bản sao lưu?';
+
+  @override
+  String get importLauncherSetupConfirmButton => 'Nhập';
+
+  @override
+  String importLauncherSetupDone(int categories, int spacers) {
+    return 'Đã khôi phục. Danh mục: $categories, khoảng trống: $spacers.';
+  }
+
+  @override
+  String importLauncherSetupSkipped(String packages) {
+    return 'Chưa cài đặt, đã bỏ qua: $packages. Cài đặt rồi nhập lại để đặt chúng vào chỗ.';
+  }
+
+  @override
+  String importLauncherSetupAdded(String packages) {
+    return 'Không có trong bản sao lưu, đã thêm vào Tất cả ứng dụng: $packages';
+  }
+
+  @override
+  String launcherBackupNotFound(String path) {
+    return 'Không tìm thấy bản sao lưu tại $path.';
+  }
+
+  @override
+  String get launcherBackupInvalid => 'Không thể đọc tệp sao lưu.';
+
+  @override
+  String get launcherBackupNewerVersion =>
+      'Bản sao lưu đến từ phiên bản TV Launcher mới hơn. Hãy cập nhật launcher này trước.';
+
+  @override
+  String launcherBackupFailed(String error) {
+    return 'Sao lưu thất bại: $error';
+  }
 }

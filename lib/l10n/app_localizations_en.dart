@@ -811,4 +811,54 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get brightnessSlotNight => '10 PM - 6 AM';
+
+  @override
+  String get exportLauncherSetup => 'Export launcher setup';
+
+  @override
+  String get importLauncherSetup => 'Import launcher setup';
+
+  @override
+  String exportLauncherSetupDone(String path) {
+    return 'Saved to $path. Copy it to the new TV with adb pull and adb push.';
+  }
+
+  @override
+  String get importLauncherSetupConfirm =>
+      'Replace the home screen layout and launcher settings on this TV with the backup?';
+
+  @override
+  String get importLauncherSetupConfirmButton => 'Import';
+
+  @override
+  String importLauncherSetupDone(int categories, int spacers) {
+    return 'Restored. Categories: $categories, spacers: $spacers.';
+  }
+
+  @override
+  String importLauncherSetupSkipped(String packages) {
+    return 'Not installed, skipped: $packages. Install them and import again to place them.';
+  }
+
+  @override
+  String importLauncherSetupAdded(String packages) {
+    return 'Not in the backup, added to All Apps: $packages';
+  }
+
+  @override
+  String launcherBackupNotFound(String path) {
+    return 'No backup found at $path.';
+  }
+
+  @override
+  String get launcherBackupInvalid => 'The backup file cannot be read.';
+
+  @override
+  String get launcherBackupNewerVersion =>
+      'The backup comes from a newer version of TV Launcher. Update this launcher first.';
+
+  @override
+  String launcherBackupFailed(String error) {
+    return 'Backup failed: $error';
+  }
 }

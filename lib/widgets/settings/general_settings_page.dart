@@ -26,6 +26,7 @@ import 'date_time_format_page.dart';
 import 'back_button_action_page.dart';
 import 'wifi_usage_period_page.dart';
 import 'screensaver_clock_style_page.dart';
+import 'launcher_backup_actions.dart';
 
 
 class GeneralSettingsPage extends StatelessWidget {
@@ -80,6 +81,17 @@ class GeneralSettingsPage extends StatelessWidget {
                   leading: const Icon(Icons.wifi),
                   title: Text(localizations.wifiUsagePeriod, style: Theme.of(context).textTheme.bodyMedium),
                   onPressed: () => Navigator.of(context).pushNamed(WifiUsagePeriodPage.routeName),
+                ),
+                const SettingsSectionDivider(),
+                FocusableSettingsTile(
+                  leading: const Icon(Icons.upload_file),
+                  title: Text(localizations.exportLauncherSetup, style: Theme.of(context).textTheme.bodyMedium),
+                  onPressed: () => exportLauncherSetup(context),
+                ),
+                FocusableSettingsTile(
+                  leading: const Icon(Icons.download),
+                  title: Text(localizations.importLauncherSetup, style: Theme.of(context).textTheme.bodyMedium),
+                  onPressed: () => importLauncherSetup(context),
                 ),
 
               ],

@@ -813,4 +813,54 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get brightnessSlotNight => '10 PM - 6 AM';
+
+  @override
+  String get exportLauncherSetup => 'Başlatıcı ayarlarını dışa aktar';
+
+  @override
+  String get importLauncherSetup => 'Başlatıcı ayarlarını içe aktar';
+
+  @override
+  String exportLauncherSetupDone(String path) {
+    return '$path konumuna kaydedildi. adb pull ve adb push ile yeni TV\'ye kopyalayın.';
+  }
+
+  @override
+  String get importLauncherSetupConfirm =>
+      'Bu TV\'deki ana ekran düzeni ve başlatıcı ayarları yedekle değiştirilsin mi?';
+
+  @override
+  String get importLauncherSetupConfirmButton => 'İçe aktar';
+
+  @override
+  String importLauncherSetupDone(int categories, int spacers) {
+    return 'Geri yüklendi. Kategoriler: $categories, boşluklar: $spacers.';
+  }
+
+  @override
+  String importLauncherSetupSkipped(String packages) {
+    return 'Yüklü değil, atlandı: $packages. Yerleştirmek için yükleyip tekrar içe aktarın.';
+  }
+
+  @override
+  String importLauncherSetupAdded(String packages) {
+    return 'Yedekte yok, Tüm Uygulamalar\'a eklendi: $packages';
+  }
+
+  @override
+  String launcherBackupNotFound(String path) {
+    return '$path konumunda yedek bulunamadı.';
+  }
+
+  @override
+  String get launcherBackupInvalid => 'Yedek dosyası okunamıyor.';
+
+  @override
+  String get launcherBackupNewerVersion =>
+      'Yedek, TV Launcher\'ın daha yeni bir sürümünden. Önce bu başlatıcıyı güncelleyin.';
+
+  @override
+  String launcherBackupFailed(String error) {
+    return 'Yedekleme başarısız: $error';
+  }
 }

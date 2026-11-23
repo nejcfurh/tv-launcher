@@ -246,5 +246,17 @@
   "brightnessSlotDay": "9:00–15:00",
   "brightnessSlotAfternoon": "15:00–18:00",
   "brightnessSlotEvening": "18:00–22:00",
-  "brightnessSlotNight": "22:00–6:00"
+  "brightnessSlotNight": "22:00–6:00",
+  "exportLauncherSetup": "Xuất thiết lập launcher",
+  "importLauncherSetup": "Nhập thiết lập launcher",
+  "exportLauncherSetupDone": "Đã lưu vào {path}. Sao chép sang TV mới bằng adb pull và adb push.",
+  "importLauncherSetupConfirm": "Thay bố cục màn hình chính và cài đặt launcher trên TV này bằng bản sao lưu?",
+  "importLauncherSetupConfirmButton": "Nhập",
+  "importLauncherSetupDone": "Đã khôi phục. Danh mục: {categories}, khoảng trống: {spacers}.",
+  "importLauncherSetupSkipped": "Chưa cài đặt, đã bỏ qua: {packages}. Cài đặt rồi nhập lại để đặt chúng vào chỗ.",
+  "importLauncherSetupAdded": "Không có trong bản sao lưu, đã thêm vào Tất cả ứng dụng: {packages}",
+  "launcherBackupNotFound": "Không tìm thấy bản sao lưu tại {path}.",
+  "launcherBackupInvalid": "Không thể đọc tệp sao lưu.",
+  "launcherBackupNewerVersion": "Bản sao lưu đến từ phiên bản TV Launcher mới hơn. Hãy cập nhật launcher này trước.",
+  "launcherBackupFailed": "Sao lưu thất bại: {error}"
 }

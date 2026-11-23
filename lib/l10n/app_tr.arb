@@ -203,5 +203,17 @@
     "redditSubredditAdded": "Subreddit eklendi",
     "redditSubredditInvalid": "Lütfen geçerli bir subreddit adı girin",
     "redditWallpaperUpdated": "Duvar kağıdı başarıyla güncellendi",
-    "redditWallpaperFailed": "Duvar kağıdı alınamadı. Sorun devam ederse ayarlardan bir Reddit İstemci Kimliği girin."
+    "redditWallpaperFailed": "Duvar kağıdı alınamadı. Sorun devam ederse ayarlardan bir Reddit İstemci Kimliği girin.",
+    "exportLauncherSetup": "Başlatıcı ayarlarını dışa aktar",
+    "importLauncherSetup": "Başlatıcı ayarlarını içe aktar",
+    "exportLauncherSetupDone": "{path} konumuna kaydedildi. adb pull ve adb push ile yeni TV'ye kopyalayın.",
+    "importLauncherSetupConfirm": "Bu TV'deki ana ekran düzeni ve başlatıcı ayarları yedekle değiştirilsin mi?",
+    "importLauncherSetupConfirmButton": "İçe aktar",
+    "importLauncherSetupDone": "Geri yüklendi. Kategoriler: {categories}, boşluklar: {spacers}.",
+    "importLauncherSetupSkipped": "Yüklü değil, atlandı: {packages}. Yerleştirmek için yükleyip tekrar içe aktarın.",
+    "importLauncherSetupAdded": "Yedekte yok, Tüm Uygulamalar'a eklendi: {packages}",
+    "launcherBackupNotFound": "{path} konumunda yedek bulunamadı.",
+    "launcherBackupInvalid": "Yedek dosyası okunamıyor.",
+    "launcherBackupNewerVersion": "Yedek, TV Launcher'ın daha yeni bir sürümünden. Önce bu başlatıcıyı güncelleyin.",
+    "launcherBackupFailed": "Yedekleme başarısız: {error}"
 }

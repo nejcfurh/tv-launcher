@@ -820,4 +820,55 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get brightnessSlotNight => '10 PM - 6 AM';
+
+  @override
+  String get exportLauncherSetup => 'Exportar configuración del launcher';
+
+  @override
+  String get importLauncherSetup => 'Importar configuración del launcher';
+
+  @override
+  String exportLauncherSetupDone(String path) {
+    return 'Guardado en $path. Cópialo al nuevo televisor con adb pull y adb push.';
+  }
+
+  @override
+  String get importLauncherSetupConfirm =>
+      '¿Reemplazar el diseño de la pantalla de inicio y los ajustes del launcher de este televisor con la copia de seguridad?';
+
+  @override
+  String get importLauncherSetupConfirmButton => 'Importar';
+
+  @override
+  String importLauncherSetupDone(int categories, int spacers) {
+    return 'Restaurado. Categorías: $categories, espaciadores: $spacers.';
+  }
+
+  @override
+  String importLauncherSetupSkipped(String packages) {
+    return 'No instaladas, omitidas: $packages. Instálalas e importa de nuevo para colocarlas.';
+  }
+
+  @override
+  String importLauncherSetupAdded(String packages) {
+    return 'No están en la copia, añadidas a Todas las apps: $packages';
+  }
+
+  @override
+  String launcherBackupNotFound(String path) {
+    return 'No hay copia de seguridad en $path.';
+  }
+
+  @override
+  String get launcherBackupInvalid =>
+      'No se puede leer el archivo de copia de seguridad.';
+
+  @override
+  String get launcherBackupNewerVersion =>
+      'La copia proviene de una versión más reciente de TV Launcher. Actualiza este launcher primero.';
+
+  @override
+  String launcherBackupFailed(String error) {
+    return 'Error en la copia de seguridad: $error';
+  }
 }
