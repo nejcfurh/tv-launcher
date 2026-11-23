@@ -52,6 +52,18 @@ void main() {
       expect(colours.luma, lessThan(kBandBrightLuma));
     });
 
+    test('a logo reaching the edge does not tint the extension colour', () {
+      final data = _solid(40, 20, Colors.white);
+      // Red logo strokes reaching the top and bottom edges, as in a tight banner crop.
+      for (var y = 0; y < 20; y++) {
+        for (var x = 8; x < 14; x++) {
+          data.setUint8((y * 40 + x) * 4 + 1, 0);
+          data.setUint8((y * 40 + x) * 4 + 2, 0);
+        }
+      }
+      expect(bandArtColours(data, 40)!.edge, const Color(0xFFFFFFFF));
+    });
+
     test('a fully transparent picture has no colours', () {
       expect(bandArtColours(_solid(40, 20, const Color(0x00FFFFFF)), 40), isNull);
     });
@@ -85,6 +97,22 @@ void main() {
       expect(at(flat, 2, 5), [0x20, 0x50, 0xA0]);
       expect(at(flat, 57, 25), [0x20, 0x50, 0xA0]);
       expect(at(flat, 30, 15), [255, 255, 255]);
+    });
+
+    test('ignores a logo that touches the edge when modelling the background', () {
+      final data = gradientWithLogo();
+      // A bit of logo on the right edge, as a tight crop can cut one.
+      for (var x = 57; x < width; x++) {
+        for (var y = 14; y < 16; y++) {
+          for (var c = 0; c < 3; c++) {
+            data.setUint8((y * width + x) * 4 + c, 255);
+          }
+        }
+      }
+      final flat = bandFlattenBackground(data, width, fill)!;
+      // The background between the logo and that edge, in the same rows, is still flattened.
+      expect(at(flat, 45, 14), [0x20, 0x50, 0xA0]);
+      expect(at(flat, 52, 15), [0x20, 0x50, 0xA0]);
     });
 
     test('leaves art with transparent edges (an icon) alone', () {

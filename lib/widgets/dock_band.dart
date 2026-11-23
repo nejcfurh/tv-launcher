@@ -99,7 +99,8 @@ Path bandTilePath(Size size, double slant) => Path()
   ..lineTo(0, size.height)
   ..close();
 
-/// The colour a tile's art is extended with (mean of its opaque edge pixels) and how bright the
+/// The colour a tile's art is extended with (median of its opaque edge pixels, so a logo touching
+/// the edge does not tint it) and how bright the
 /// art is (mean luma of its opaque pixels, 0–1). Null when nothing in it is opaque.
 ({Color edge, double luma})? bandArtColours(ByteData rgba, int width) {
   final pixels = rgba.lengthInBytes ~/ 4;
@@ -107,7 +108,8 @@ Path bandTilePath(Size size, double slant) => Path()
   final height = pixels ~/ width;
   final bandX = math.max(1, (width * 0.1).ceil());
   final bandY = math.max(1, (height * 0.1).ceil());
-  var r = 0.0, g = 0.0, b = 0.0, edgeN = 0;
+  final hr = List.filled(256, 0), hg = List.filled(256, 0), hb = List.filled(256, 0);
+  var edgeN = 0;
   var lumaSum = 0.0, lumaN = 0;
   for (var y = 0; y < height; y++) {
     final inYBand = y < bandY || y >= height - bandY;
@@ -118,9 +120,9 @@ Path bandTilePath(Size size, double slant) => Path()
       lumaSum += (0.2126 * pr + 0.7152 * pg + 0.0722 * pb) / 255;
       lumaN++;
       if (inYBand || x < bandX || x >= width - bandX) {
-        r += pr;
-        g += pg;
-        b += pb;
+        hr[pr]++;
+        hg[pg]++;
+        hb[pb]++;
         edgeN++;
       }
     }
@@ -128,8 +130,17 @@ Path bandTilePath(Size size, double slant) => Path()
   if (lumaN == 0) return null;
   final edge = edgeN == 0
       ? kBandPlainTileColor
-      : Color.fromARGB(255, (r / edgeN).round(), (g / edgeN).round(), (b / edgeN).round());
+      : Color.fromARGB(255, _histogramMedian(hr, edgeN), _histogramMedian(hg, edgeN), _histogramMedian(hb, edgeN));
   return (edge: edge, luma: lumaSum / lumaN);
+}
+
+int _histogramMedian(List<int> histogram, int count) {
+  var seen = 0;
+  for (var value = 0; value < histogram.length; value++) {
+    seen += histogram[value];
+    if (seen * 2 >= count) return value;
+  }
+  return histogram.length - 1;
 }
 
 /// How far (RGB distance, 0–441) a pixel may sit from the art's smooth background and still
@@ -162,7 +173,19 @@ Uint8List? bandFlattenBackground(ByteData rgba, int width, Color fill) {
       }
       out.add([r / depth, g / depth, b / depth]);
     }
-    return out;
+    // A running median along the edge, so a logo that touches it for a short stretch does not
+    // bend the background model there.
+    final radius = math.max(2, (length * 0.1).round());
+    double median(int i, int c) {
+      final window = [
+        for (var j = math.max(0, i - radius); j < math.min(length, i + radius + 1); j++) out[j][c],
+      ]..sort();
+      return window[window.length ~/ 2];
+    }
+
+    return [
+      for (var i = 0; i < length; i++) [median(i, 0), median(i, 1), median(i, 2)],
+    ];
   }
 
   for (var y = 0; y < height; y++) {
