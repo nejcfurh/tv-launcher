@@ -33,9 +33,9 @@ import 'package:flauncher/providers/wallpaper_service.dart';
 import 'package:flauncher/providers/watch_next_service.dart';
 import 'package:flauncher/widgets/app_card.dart';
 import 'package:flauncher/widgets/cached_blur_backdrop.dart';
-import 'package:flauncher/widgets/category_clean_row.dart';
 import 'package:flauncher/widgets/category_row.dart';
 import 'package:flauncher/widgets/launcher_alternative_view.dart';
+import 'package:flauncher/widgets/dock_band.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/wallpaper_video_background.dart';
 import 'package:flauncher/widgets/watch_next_hero.dart';
@@ -50,15 +50,14 @@ import 'models/app.dart';
 import 'models/category.dart';
 import 'models/watch_next_item.dart';
 
-/// The tray's edge sits 16 dp outside the content keyline (x = 48), so tiles line up with the
-/// top bar and the hero. The 34 dp below the tray (it ends at y = 506 on a 540 dp tall screen)
-/// belong to the dock, so the first grid section starts below the screen edge.
-const _kDockOuterPadding = EdgeInsets.only(left: 32, right: 32, top: 10, bottom: 34);
+/// The band runs across the whole screen width. The dock block stays 118 dp tall, as it was with
+/// the tray, so the hero above it does not move; the 24 dp below the band (it ends at y = 516 on a
+/// 540 dp tall screen) belong to the dock, so the first grid section starts below the screen edge.
+const _kDockOuterPadding = EdgeInsets.only(top: 10, bottom: 118 - 10 - kBandHeight);
 
 /// Space between the dock's outer padding and the bottom edge of the screen.
 const _kDockBottomMargin = 0.0;
 
-const _kDockTrayPadding = 16.0;
 
 /// How long focus rests on a dock tile before the hero switches to that app's item.
 const kDockHeroFollowDelay = Duration(milliseconds: 350);
@@ -719,33 +718,14 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
     required bool handleUpNavigationToSettings,
     required bool showAllAppsTile,
   }) {
-    final tileRadius = context.select<SettingsService, double>((s) => s.cardCornerRadius);
-    // Concentric with the tiles: tray radius = tile radius + tray padding.
-    final trayRadius = BorderRadius.circular(tileRadius + _kDockTrayPadding);
-
-    // Flat, translucent tray: the picture shows through as it is, without a blurred copy.
-    return Container(
-      key: const Key("dock_tray"),
-      padding: const EdgeInsets.all(_kDockTrayPadding),
-      decoration: BoxDecoration(color: const Color.fromRGBO(30, 30, 30, 0.55), borderRadius: trayRadius),
-      // A foreground border adds no padding, so the tiles start exactly on the content keyline.
-      foregroundDecoration: BoxDecoration(
-        borderRadius: trayRadius,
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.1),
-          width: 1 / MediaQuery.devicePixelRatioOf(context),
-        ),
-      ),
-      child: CategoryCleanRow(
-        category: category,
-        applications: apps,
-        isFirstSection: handleUpNavigationToSettings,
-        scrollAlignment: 1.0,
-        onAppFocused: _onHomeSectionFocused,
-        onDockAppFocused: _onDockAppFocused,
-        onAllAppsPressed: showAllAppsTile ? _focusFirstGridApp : null,
-        allAppsFocusNode: _allAppsFocusNode,
-      ),
+    return DockBand(
+      category: category,
+      applications: apps,
+      isFirstSection: handleUpNavigationToSettings,
+      onAppFocused: _onHomeSectionFocused,
+      onDockAppFocused: _onDockAppFocused,
+      onAllAppsPressed: showAllAppsTile ? _focusFirstGridApp : null,
+      allAppsFocusNode: _allAppsFocusNode,
     );
   }
 
@@ -768,7 +748,7 @@ class _FLauncherState extends State<FLauncher> with WidgetsBindingObserver {
       final nodeContext = node.context;
       if (nodeContext == null || !node.canRequestFocus) continue;
       if (nodeContext.findAncestorWidgetOfExactType<AppCard>() == null) continue;
-      if (nodeContext.findAncestorWidgetOfExactType<CategoryCleanRow>() != null) continue;
+      if (nodeContext.findAncestorWidgetOfExactType<DockBand>() != null) continue;
       final renderObject = nodeContext.findRenderObject();
       if (renderObject is! RenderBox || !renderObject.attached) continue;
       final origin = renderObject.localToGlobal(Offset.zero);

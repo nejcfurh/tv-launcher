@@ -26,6 +26,7 @@ import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/widgets/app_card_contour_painter.dart';
 import 'package:flauncher/widgets/application_info_panel.dart';
+import 'package:flauncher/widgets/dock_band.dart';
 import 'package:flauncher/widgets/dock_focus_ring.dart';
 import 'package:flauncher/widgets/focus_keyboard_listener.dart';
 import 'package:flutter/material.dart';
@@ -87,6 +88,10 @@ class AppCard extends StatefulWidget {
   /// and no dimming of unfocused tiles.
   final bool dockTile;
 
+  /// Set for a tile in the dock band ([DockBand]): a parallelogram leaning by this many dp, its
+  /// name underneath, larger when focused and muted otherwise.
+  final double? bandSlant;
+
   const AppCard({
     super.key,
     required this.application,
@@ -101,6 +106,7 @@ class AppCard extends StatefulWidget {
     this.ensureVisibleOnFocus = true,
     this.onlyScrollWhenNearBottom = false,
     this.dockTile = false,
+    this.bandSlant,
   });
 
   @override
@@ -223,6 +229,9 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _updateHighlightAnimation();
       });
+    }
+    if (widget.bandSlant case final slant?) {
+      return _bandTile(displayName, slant);
     }
     final appImageWidget = _appImage(displayName);
     final bool shouldHighlight = _shouldHighlight();
@@ -358,7 +367,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
       if (mounted) {
         await precacheImage(image, context).timeout(const Duration(seconds: 2), onTimeout: () {});
       }
-      final dark = widget.dockTile && mounted
+      final dark = widget.dockTile && widget.bandSlant == null && mounted
           ? await isDarkTileImage(image, createLocalImageConfiguration(context)) ?? false
           : false;
       if (mounted) {
@@ -379,6 +388,68 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
       return AspectRatio(aspectRatio: kAppCardAspectRatio, child: child);
     }
     return child;
+  }
+
+  Widget _bandTile(String displayName, double slant) {
+    final focused = _shouldHighlight() && !_moving;
+    return FocusKeyboardListener(
+      onPressed: _onPressed,
+      onLongPress: _onLongPress,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: kBandTileHeight,
+            child: AnimatedScale(
+              scale: _clicked ? 0.95 : (focused ? kBandFocusedScale : 1.0),
+              duration: kBandFocusDuration,
+              curve: Curves.easeOut,
+              child: BandTileFace(
+                image: _loadedImage?.$2,
+                focused: focused || _moving,
+                slant: slant,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: InkWell(
+                    focusNode: _focusNode,
+                    autofocus: widget.autofocus,
+                    focusColor: Colors.transparent,
+                    hoverColor: Colors.transparent,
+                    splashColor: Colors.transparent,
+                    highlightColor: Colors.transparent,
+                    onTap: () => _onPressed(LogicalKeyboardKey.enter),
+                    onLongPress: () => _onLongPress(LogicalKeyboardKey.enter),
+                    onFocusChange: (focused) => _handleFocusChange(context, focused),
+                    child: Stack(fit: StackFit.expand, children: [if (_moving) ..._arrows()]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Under the parallelogram's bottom edge, which ends [slant] short of the box's right.
+          AnimatedPadding(
+            padding: EdgeInsets.only(top: focused ? kBandLabelGap + 4 : kBandLabelGap, right: slant),
+            duration: kBandFocusDuration,
+            curve: Curves.easeOut,
+            child: Text(
+              displayName,
+              key: Key('band_label_${widget.application.packageName}'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.2,
+                fontWeight: focused ? FontWeight.w500 : FontWeight.w400,
+                color: focused ? Colors.white : const Color(0xBFFFFFFF),
+                shadows: const [Shadow(color: Color(0x99000000), offset: Offset(0, 1), blurRadius: 3)],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _appImage(String displayName) {

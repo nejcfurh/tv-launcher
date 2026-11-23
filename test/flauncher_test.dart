@@ -17,12 +17,14 @@
  */
 
 import 'dart:async';
+import 'dart:math';
 import 'dart:ui' as ui;
 import 'dart:typed_data';
 
 import 'package:flauncher/build_flags.dart';
 import 'package:flauncher/database.dart';
 import 'package:flauncher/flauncher.dart';
+import 'package:flauncher/widgets/dock_band.dart';
 import 'package:flauncher/widgets/home_idle_dimmer.dart';
 import 'package:flauncher/flauncher_channel.dart';
 import 'package:flauncher/gradients.dart';
@@ -39,7 +41,6 @@ import 'package:flauncher/widgets/apps_grid.dart';
 import 'package:flauncher/widgets/cached_blur_backdrop.dart';
 import 'package:flauncher/widgets/category_clean_row.dart';
 import 'package:flauncher/widgets/category_row.dart';
-import 'package:flauncher/widgets/app_card.dart';
 import 'package:flauncher/widgets/focus_aware_app_bar.dart';
 import 'package:flauncher/widgets/settings/settings_panel.dart';
 import 'package:flauncher/widgets/settings/settings_panel_page.dart';
@@ -113,26 +114,7 @@ void main() {
     }
   });
 
-  testWidgets("Dock sits at the bottom of the screen", (tester) async {
-    final appsService = mkAppService();
-    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
-    final favorites = List.generate(
-      8,
-      (i) => fakeApp(packageName: "me.efesser.flauncher.$i", name: "FLauncher $i", version: "1.0.0"),
-    );
-    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
-
-    await _pumpWidgetWith(tester, appsService);
-    await tester.pumpAndSettle();
-
-    final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
-    // Bottom margin (34) + tray padding (16).
-    expect(tester.getBottomLeft(find.byType(CategoryCleanRow)).dy, moreOrLessEquals(screenHeight - 50, epsilon: 1.5));
-    expect(tester.getBottomLeft(find.byKey(const Key("dock_tray"))).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
-    expect(tester.getTopLeft(find.byKey(const Key("dock_tray"))).dx, 32);
-  });
-
-  testWidgets("Dock tiles are 82x42 and spread from keyline to keyline", (tester) async {
+  testWidgets("The dock band spans the screen width and ends 24 dp above the bottom edge", (tester) async {
     final appsService = mkAppService();
     final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
     final favorites = List.generate(
@@ -145,14 +127,54 @@ void main() {
     await tester.pumpAndSettle();
 
     final screenWidth = tester.view.physicalSize.width / tester.view.devicePixelRatio;
-    final first = findAppCard(favorites.first.packageName);
-    final last = findAppCard(favorites.last.packageName);
-    expect(tester.getSize(first), const Size(82, 42));
-    expect(tester.getTopLeft(first).dx, 48);
-    expect(tester.getTopRight(last).dx, screenWidth - 48);
+    final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final band = find.byKey(const Key("dock_band"));
+    expect(tester.getTopLeft(band).dx, 0);
+    expect(tester.getTopRight(band).dx, screenWidth);
+    expect(tester.getBottomLeft(band).dy, moreOrLessEquals(screenHeight - 24, epsilon: 1.5));
   });
 
-  testWidgets("Dock ends with a square All apps tile when apps are listed below it", (tester) async {
+  testWidgets("Band tiles are identical, named, and the screen edges cut a half tile at each end that fades out", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = List.generate(
+      8,
+      (i) => fakeApp(packageName: "me.efesser.flauncher.$i", name: "FLauncher $i", version: "1.0.0"),
+    );
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+
+    final screenWidth = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final geometry = BandGeometry(screenWidth, favorites.length);
+    for (final (i, app) in favorites.indexed) {
+      final card = findAppCard(app.packageName);
+      expect(tester.getSize(card), Size(geometry.boxWidth, kBandHeight), reason: app.packageName);
+      expect(tester.getTopLeft(card).dx, moreOrLessEquals(geometry.slotLeft(i + 1)), reason: app.packageName);
+      expect(tester.widget<Text>(find.byKey(Key("band_label_${app.packageName}"))).data, app.name);
+    }
+    // Half tiles, no app repeated: one starts left of the screen, the other ends right of it.
+    final left = tester.getRect(find.byKey(const Key("dock_band_edge_0")));
+    final right = tester.getRect(find.byKey(Key("dock_band_edge_${favorites.length + 1}")));
+    expect(left.left, lessThan(0));
+    expect(left.right, greaterThan(0));
+    expect(right.left, lessThan(screenWidth));
+    expect(right.right, greaterThan(screenWidth));
+    // Each half fades out towards the screen edge that cuts it.
+    BandEdgePainter edgePainter(Key key) => tester
+        .widget<CustomPaint>(find.descendant(of: find.byKey(key), matching: find.byType(CustomPaint)))
+        .painter! as BandEdgePainter;
+    final leftPainter = edgePainter(const Key("dock_band_edge_0"));
+    final rightPainter = edgePainter(Key("dock_band_edge_${favorites.length + 1}"));
+    expect(left.left + leftPainter.clearAt, moreOrLessEquals(0));
+    expect(leftPainter.solidAt, greaterThan(leftPainter.clearAt));
+    expect(right.left + rightPainter.clearAt, moreOrLessEquals(screenWidth));
+    expect(rightPainter.solidAt, lessThan(rightPainter.clearAt));
+    expect(geometry.slant, moreOrLessEquals(kBandTileHeight * tan(10 * pi / 180)));
+  });
+
+  testWidgets("The band ends with an All apps tile, sized like the app tiles, when apps are listed below it", (tester) async {
     final appsService = mkAppService();
     final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
     final applicationsCategory = fakeCategory(name: "Applications", order: 1);
@@ -165,11 +187,12 @@ void main() {
     await tester.pumpAndSettle();
 
     final screenWidth = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    final geometry = BandGeometry(screenWidth, 2);
     final tile = find.byType(DockAllAppsTile);
     expect(tile, findsOneWidget);
-    expect(tester.getSize(tile), const Size(42, 42));
-    expect(tester.getTopRight(tile).dx, screenWidth - 48);
-    expect(tester.getTopLeft(findAppCard("me.efesser.dock")).dx, 48);
+    expect(tester.getSize(tile), tester.getSize(findAppCard("me.efesser.dock")));
+    expect(tester.getTopLeft(tile).dx, moreOrLessEquals(geometry.slotLeft(2)));
+    expect(tester.getTopLeft(findAppCard("me.efesser.dock")).dx, moreOrLessEquals(geometry.slotLeft(1)));
   });
 
   testWidgets("Dock has no All apps tile when nothing is listed below it", (tester) async {
@@ -225,7 +248,7 @@ void main() {
     expect(tester.widget<CustomScrollView>(find.byType(CustomScrollView)).controller!.offset, 0);
   });
 
-  testWidgets("Dock hides app names even when names are on for the grid", (tester) async {
+  testWidgets("The band names its tiles under them; the grid keeps its own name labels", (tester) async {
     final appsService = mkAppService();
     final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
     final applicationsCategory = fakeCategory(name: "Applications", order: 1);
@@ -243,10 +266,11 @@ void main() {
       matching: find.byWidgetPredicate((w) => w.runtimeType.toString() == '_AppNameLabel'),
     );
     expect(nameLabel("me.efesser.dock"), findsNothing);
+    expect(find.byKey(const Key("band_label_me.efesser.dock")), findsOneWidget);
     expect(nameLabel("me.efesser.grid"), findsOneWidget);
   });
 
-  testWidgets("Focused dock tile scales up and gets the white ring; others stay as they are", (tester) async {
+  testWidgets("The focused band tile is larger and at full strength; the others are muted", (tester) async {
     FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
     addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
     final appsService = mkAppService();
@@ -264,27 +288,72 @@ void main() {
     await tester.pumpAndSettle();
     expect(isAppCardFocused(tester, "me.efesser.one"), isTrue);
 
-    double ringOpacity(String packageName) => tester
-        .widget<AnimatedOpacity>(find.descendant(of: findAppCard(packageName), matching: find.byKey(const Key("dock_focus_ring"))))
-        .opacity;
+    bool full(String packageName) => tester
+        .widget<BandTileFace>(find.descendant(of: findAppCard(packageName), matching: find.byType(BandTileFace)))
+        .focused;
     double tileScale(String packageName) => tester
-        .widget<AnimatedScale>(find.descendant(of: findAppCard(packageName), matching: find.byType(AnimatedScale)).at(1))
+        .widget<AnimatedScale>(find.descendant(of: findAppCard(packageName), matching: find.byType(AnimatedScale)).first)
         .scale;
+    FontWeight? labelWeight(String packageName) =>
+        tester.widget<Text>(find.byKey(Key("band_label_$packageName"))).style!.fontWeight;
 
-    expect(ringOpacity("me.efesser.one"), 1);
-    expect(tileScale("me.efesser.one"), 1.14);
-    expect(ringOpacity("me.efesser.two"), 0);
+    expect(full("me.efesser.one"), isTrue);
+    expect(tileScale("me.efesser.one"), kBandFocusedScale);
+    expect(labelWeight("me.efesser.one"), FontWeight.w500);
+    expect(full("me.efesser.two"), isFalse);
     expect(tileScale("me.efesser.two"), 1);
-    // Unfocused dock tiles are not dimmed.
-    expect(
-      find.descendant(of: findAppCard("me.efesser.two"), matching: find.byWidgetPredicate((w) => w is ColoredBox && w.color == const Color(0x1A000000))),
-      findsNothing,
-    );
+    expect(labelWeight("me.efesser.two"), FontWeight.w400);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
-    expect(ringOpacity("me.efesser.one"), 0);
-    expect(ringOpacity("me.efesser.two"), 1);
+    expect(full("me.efesser.one"), isFalse);
+    expect(full("me.efesser.two"), isTrue);
+    expect(tileScale("me.efesser.two"), kBandFocusedScale);
+
+    // It grows above the band's top as much as below, and the band does not cut that off.
+    final band = tester.getRect(find.byKey(const Key("dock_band")));
+    final face = tester.getRect(
+        find.descendant(of: findAppCard("me.efesser.two"), matching: find.byType(BandTileFace)));
+    final growth = kBandTileHeight * (kBandFocusedScale - 1) / 2;
+    expect(face.top, moreOrLessEquals(band.top - growth));
+    expect(face.bottom, moreOrLessEquals(band.top + kBandTileHeight + growth));
+    final clip = tester
+        .widget<ClipRect>(find.descendant(of: find.byKey(const Key("dock_band")), matching: find.byType(ClipRect)).first)
+        .clipper!
+        .getClip(band.size);
+    expect(band.top + clip.top, lessThan(face.top - 3 - 10)); // cut-out stroke and shadow too
+    expect(clip.left, 0);
+    expect(clip.right, band.width);
+  });
+
+  testWidgets("Right from the last band tile goes to the first, Left from the first to the last", (tester) async {
+    FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(() => FocusManager.instance.highlightStrategy = FocusHighlightStrategy.automatic);
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    when(appsService.categoriesWithApps).thenReturn([
+      CategoryWithApps(favoritesCategory, [
+        fakeApp(packageName: "me.efesser.one", name: "One"),
+        fakeApp(packageName: "me.efesser.two", name: "Two"),
+        fakeApp(packageName: "me.efesser.three", name: "Three"),
+      ]),
+    ]);
+
+    await _pumpWidgetWith(tester, appsService);
+    await tester.pumpAndSettle();
+    expect(isAppCardFocused(tester, "me.efesser.one"), isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(isAppCardFocused(tester, "me.efesser.three"), isTrue, reason: 'Left from the first');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(isAppCardFocused(tester, "me.efesser.one"), isTrue, reason: 'Right from the last');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(isAppCardFocused(tester, "me.efesser.two"), isTrue, reason: 'an ordinary step');
   });
 
   testWidgets("The grid's first heading stays below the screen edge until the grid is focused", (tester) async {
@@ -300,11 +369,11 @@ void main() {
     await tester.pumpAndSettle();
 
     final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
-    expect(tester.getBottomLeft(find.byKey(const Key("dock_tray"))).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+    expect(tester.getBottomLeft(find.byKey(const Key("dock_band"))).dy, moreOrLessEquals(screenHeight - 24, epsilon: 1.5));
     expect(tester.getTopLeft(find.text("Applications", skipOffstage: false)).dy, greaterThanOrEqualTo(screenHeight - 0.5));
   });
 
-  testWidgets("Dock tray is flat: no blur behind it", (tester) async {
+  testWidgets("The dock band is flat: no blur behind it", (tester) async {
     final appsService = mkAppService();
     final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
     when(appsService.categoriesWithApps).thenReturn([
@@ -314,9 +383,9 @@ void main() {
     await _pumpWidgetWith(tester, appsService);
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key("dock_tray")), findsOneWidget);
+    expect(find.byKey(const Key("dock_band")), findsOneWidget);
     expect(find.byType(CachedBlurBackdrop), findsNothing);
-    expect(find.ancestor(of: find.byType(CategoryCleanRow), matching: find.byType(BackdropFilter)), findsNothing);
+    expect(find.ancestor(of: find.byType(DockBand), matching: find.byType(BackdropFilter)), findsNothing);
   });
 
   testWidgets("Top bar shows shortcuts for installed apps and launches them", (tester) async {
@@ -349,7 +418,7 @@ void main() {
     verify(appsService.launchApp(browser));
   });
 
-  testWidgets("A dock tile keeps its loading cover until its icon is in, then fades it off", (tester) async {
+  testWidgets("A band tile shows a plain fill until its art is in, then the art", (tester) async {
     final appsService = mkAppService();
     final mock = appsService as MockAppsService;
     // No banner, so the tile loads the icon; the icon arrives when the test says so.
@@ -363,26 +432,23 @@ void main() {
       CategoryWithApps(favoritesCategory, [app]),
     ]);
     await _pumpWidgetWith(tester, appsService);
-    final cover = find.descendant(
-      of: findAppCard(app.packageName),
-      matching: find.byKey(const Key('app_card_loading_cover')),
-    );
-    Iterable<double> coverOpacity() => tester
-        .widgetList<FadeTransition>(find.ancestor(of: cover, matching: find.byType(FadeTransition)))
-        .map((transition) => transition.opacity.value);
+    BandTilePainter painter() => tester
+        .widget<CustomPaint>(find.descendant(
+          of: findAppCard(app.packageName),
+          matching: find.byWidgetPredicate((w) => w is CustomPaint && w.painter is BandTilePainter),
+        ))
+        .painter! as BandTilePainter;
 
     await tester.pump(const Duration(seconds: 5));
-    expect(cover, findsOneWidget, reason: 'no icon yet');
-    expect(coverOpacity(), everyElement(1.0));
+    expect(painter().image, isNull, reason: 'no icon yet');
+    expect(painter().edgeColour, kBandPlainTileColor);
 
     icon.complete(png);
-    for (var i = 0; i < 50 && coverOpacity().every((opacity) => opacity == 1); i++) {
+    for (var i = 0; i < 50 && painter().image == null; i++) {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
       await tester.pump(const Duration(milliseconds: 16));
     }
-    expect(coverOpacity(), contains(inExclusiveRange(0, 1)), reason: 'fading out');
-    await tester.pump(kAppImageFadeDuration);
-    expect(cover, findsNothing);
+    expect(painter().image, isNotNull);
   });
 
   testWidgets("The dock stays on the bottom edge in the frame the Watch Next hero appears", (tester) async {
@@ -403,8 +469,8 @@ void main() {
     await _pumpWidgetWithProviders(tester, mkWallpaperService(), appsService, settingsService, watchNextService);
     await tester.pumpAndSettle();
     final screenHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
-    final tray = find.byKey(const Key("dock_tray"));
-    expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+    final tray = find.byKey(const Key("dock_band"));
+    expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 24, epsilon: 1.5));
 
     // The items arrive.
     final item = WatchNextItem(id: 1, title: "The Office", posterUri: "content://poster/1");
@@ -416,7 +482,7 @@ void main() {
     await tester.pump();
 
     expect(find.text("The Office"), findsWidgets, reason: 'the hero is on screen in this frame');
-    expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
+    expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 24, epsilon: 1.5));
   });
 
   testWidgets("The hero follows the dock tile that focus rests on, not every tile it passes", (tester) async {
@@ -466,8 +532,11 @@ void main() {
       final ink = tester.widget<Ink>(find.descendant(of: findAppCard(packageName), matching: find.byType(Ink)).first);
       return ((ink.decoration! as BoxDecoration).image!.image as ResizeImage).width;
     }
+    final bandImage = tester
+        .widget<BandTileFace>(find.descendant(of: findAppCard(docked.packageName), matching: find.byType(BandTileFace)))
+        .image;
 
-    expect(decodeWidth(docked.packageName), (82 * 1.14 * tester.view.devicePixelRatio).ceil());
+    expect((bandImage! as ResizeImage).width, (82 * 1.14 * tester.view.devicePixelRatio).ceil());
     expect(decodeWidth(gridApp.packageName), 480);
   });
 

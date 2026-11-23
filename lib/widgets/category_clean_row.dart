@@ -24,6 +24,7 @@ import 'package:flauncher/providers/apps_service.dart';
 import 'package:flauncher/providers/settings_service.dart';
 import 'package:flauncher/widgets/app_card.dart';
 import 'package:flauncher/widgets/category_container_common.dart';
+import 'package:flauncher/widgets/dock_band.dart';
 import 'package:flauncher/widgets/dock_focus_ring.dart';
 import 'package:flauncher/widgets/focus_keyboard_listener.dart';
 import 'package:flutter/material.dart';
@@ -183,12 +184,16 @@ class DockAllAppsTile extends StatefulWidget {
   final VoidCallback? onFocused;
   final bool handleUpNavigationToSettings;
 
+  /// Set when the tile sits in the dock band: a plain parallelogram leaning by this many dp.
+  final double? bandSlant;
+
   const DockAllAppsTile({
     super.key,
     this.focusNode,
     required this.onPressed,
     this.onFocused,
     this.handleUpNavigationToSettings = false,
+    this.bandSlant,
   });
 
   @override
@@ -224,10 +229,9 @@ class _DockAllAppsTileState extends State<DockAllAppsTile> {
       (s) => (s.cardCornerRadius, s.showFocusBorders),
     );
     final highlighted = _focused && FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
-    return Semantics(
-      button: true,
-      label: AppLocalizations.of(context)!.dockAllApps,
-      child: Focus(
+    // Only the tile takes focus (not its name in the band), so it sits on the same row as the app
+    // tiles for left and right traversal.
+    Widget focusable(Widget child) => Focus(
         focusNode: widget.focusNode,
         onKeyEvent: _onKey,
         onFocusChange: (focused) {
@@ -239,9 +243,19 @@ class _DockAllAppsTileState extends State<DockAllAppsTile> {
             widget.onFocused?.call();
           }
         },
-        child: GestureDetector(
-          onTap: widget.onPressed,
-          child: AnimatedScale(
+        child: GestureDetector(onTap: widget.onPressed, child: child),
+      );
+    if (widget.bandSlant case final slant?) {
+      return Semantics(
+        button: true,
+        label: AppLocalizations.of(context)!.dockAllApps,
+        child: _band(context, slant, highlighted, focusable),
+      );
+    }
+    return Semantics(
+      button: true,
+      label: AppLocalizations.of(context)!.dockAllApps,
+      child: focusable(AnimatedScale(
             scale: highlighted ? kDockTileFocusedScale : 1.0,
             duration: kDockFocusDuration,
             curve: Curves.easeOut,
@@ -265,9 +279,49 @@ class _DockAllAppsTileState extends State<DockAllAppsTile> {
                 if (showFocusBorders) DockFocusRing(tileRadius: radius, visible: highlighted),
               ],
             ),
-          ),
-        ),
-      ),
+          )),
     );
   }
+
+  Widget _band(BuildContext context, double slant, bool highlighted, Widget Function(Widget) focusable) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: kBandTileHeight,
+            child: focusable(AnimatedScale(
+              scale: highlighted ? kBandFocusedScale : 1.0,
+              duration: kBandFocusDuration,
+              curve: Curves.easeOut,
+              child: BandTileFace(
+                image: null,
+                plainColour: kBandPlainTileColor,
+                focused: highlighted,
+                slant: slant,
+                child: Padding(
+                  padding: EdgeInsets.only(left: slant / 2),
+                  child: const Center(child: Icon(Icons.apps, size: 24, color: Colors.white)),
+                ),
+              ),
+            )),
+          ),
+          Padding(
+            padding: EdgeInsets.only(top: highlighted ? kBandLabelGap + 4 : kBandLabelGap, right: slant),
+            child: Text(
+              AppLocalizations.of(context)!.dockAllApps,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.2,
+                fontWeight: highlighted ? FontWeight.w500 : FontWeight.w400,
+                color: highlighted ? Colors.white : const Color(0xBFFFFFFF),
+                shadows: const [Shadow(color: Color(0x99000000), offset: Offset(0, 1), blurRadius: 3)],
+              ),
+            ),
+          ),
+        ],
+      );
+
 }
