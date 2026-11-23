@@ -23,6 +23,7 @@ import 'dart:typed_data';
 import 'package:flauncher/build_flags.dart';
 import 'package:flauncher/database.dart';
 import 'package:flauncher/flauncher.dart';
+import 'package:flauncher/widgets/home_idle_dimmer.dart';
 import 'package:flauncher/flauncher_channel.dart';
 import 'package:flauncher/gradients.dart';
 import 'package:flauncher/models/watch_next_item.dart';
@@ -418,6 +419,34 @@ void main() {
     expect(tester.getBottomLeft(tray).dy, moreOrLessEquals(screenHeight - 34, epsilon: 1.5));
   });
 
+  testWidgets("The hero follows the dock tile that focus rests on, not every tile it passes", (tester) async {
+    final appsService = mkAppService();
+    final favoritesCategory = fakeCategory(name: "Favorites", order: 0, type: CategoryType.row);
+    final favorites = [
+      fakeApp(packageName: "com.playstation.hdmi", name: "PS5", version: "1.0.0"),
+      fakeApp(packageName: "com.netflix.ninja", name: "Netflix", version: "1.0.0"),
+      fakeApp(packageName: "com.google.android.youtube.tv", name: "YouTube", version: "1.0.0"),
+    ];
+    when(appsService.categoriesWithApps).thenReturn([CategoryWithApps(favoritesCategory, favorites)]);
+    final watchNextService = mkWatchNextService();
+
+    await _pumpWidgetWithProviders(tester, mkWallpaperService(), appsService, mkSettingsService(), watchNextService);
+    await tester.pumpAndSettle();
+    await tester.pump(kDockHeroFollowDelay * 2);
+    clearInteractions(watchNextService);
+
+    // Across Netflix to YouTube, faster than the delay.
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump(kDockHeroFollowDelay - const Duration(milliseconds: 50));
+    verifyNever(watchNextService.showFirstItemFor("com.google.android.youtube.tv"));
+
+    await tester.pump(const Duration(milliseconds: 100));
+    verify(watchNextService.showFirstItemFor("com.google.android.youtube.tv")).called(1);
+    verifyNever(watchNextService.showFirstItemFor("com.netflix.ninja"));
+  });
+
   testWidgets("Dock tiles decode their picture at the size they are shown, grid tiles at 480 px", (tester) async {
     final appsService = mkAppService();
     when((appsService as MockAppsService).getAppBanner(any)).thenAnswer((_) async => Uint8List(0));
@@ -631,6 +660,25 @@ void main() {
 
     expect(find.byKey(const Key("wallpaper_scrim")), findsOneWidget);
     expect(tester.getSize(find.byKey(const Key("wallpaper_scrim"))), tester.view.physicalSize / tester.view.devicePixelRatio);
+  });
+
+  testWidgets("Home dims its UI and darkens the backdrop after three minutes without a key", (tester) async {
+    final appsService = mkAppService();
+    when(appsService.categoriesWithApps).thenReturn([]);
+
+    await _pumpWidgetWith(tester, appsService);
+    double opacity(String key) => tester.widget<AnimatedOpacity>(find.byKey(Key(key))).opacity;
+    expect(opacity("home_idle_foreground"), 1);
+    expect(opacity("home_idle_backdrop_dim"), 0);
+
+    await tester.pump(kHomeIdleTimeout + const Duration(milliseconds: 100));
+    expect(opacity("home_idle_foreground"), 0);
+    expect(opacity("home_idle_backdrop_dim"), kHomeIdleBackdropDim);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(opacity("home_idle_foreground"), 1);
+    expect(opacity("home_idle_backdrop_dim"), 0);
   });
 
   testWidgets("Default build credits the Unsplash photographer", (tester) async {

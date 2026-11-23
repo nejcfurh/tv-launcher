@@ -122,12 +122,16 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
 
   (AppImageType, ImageProvider)? _loadedImage;
   bool _imageLoadError = false;
+  bool _darkDockArt = false;
 
   late final AnimationController _animation;
 
   late final CurvedAnimation _curvedAnimation;
   static const double _focusedScale = 1.07;
   static const Duration _focusAnimationDuration = Duration(milliseconds: 180);
+
+  /// Odd, so the last run ends bright; 3 × 1.2 s.
+  static const int _highlightPulseRuns = 3;
 
   @override
   void initState() {
@@ -272,7 +276,7 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
                                 _loadingCover(),
                                 if (_moving) ..._arrows(),
                                 if (dock)
-                                  DockTileInnerBorder(tileRadius: cornerRadius)
+                                  DockTileInnerBorder(tileRadius: cornerRadius, dark: _darkDockArt)
                                 else
                                   IgnorePointer(
                                     child: AnimatedOpacity(
@@ -354,9 +358,13 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
       if (mounted) {
         await precacheImage(image, context).timeout(const Duration(seconds: 2), onTimeout: () {});
       }
+      final dark = widget.dockTile && mounted
+          ? await isDarkTileImage(image, createLocalImageConfiguration(context)) ?? false
+          : false;
       if (mounted) {
         setState(() {
           _loadedImage = (type, image);
+          _darkDockArt = dark;
         });
       }
     } catch (_) {
@@ -510,7 +518,11 @@ class _AppCardState extends State<AppCard> with SingleTickerProviderStateMixin {
     }
     _isHighlightAnimating = shouldAnimate;
     if (shouldAnimate) {
-      _animation.repeat(reverse: true);
+      // A few pulses, then a steady outline: a pulse left running keeps the renderer busy for as
+      // long as the tile has focus (upstream arclauncher #98 measured 45% of a core).
+      _animation.repeat(reverse: true, count: _highlightPulseRuns).then((_) {
+        if (mounted && _isHighlightAnimating) _animation.value = 1.0;
+      }, onError: (_) {});
     } else {
       _animation.stop();
     }

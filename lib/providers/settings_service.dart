@@ -32,6 +32,7 @@ const _hideStatusBarInGrid = "hide_status_bar_in_grid";
 const _gradientUuidKey = "gradient_uuid";
 const _backButtonAction = "back_button_action";
 const _dateFormat = "date_format";
+const _dateFormatRedesignApplied = "date_format_redesign_applied";
 const _showCategoryTitles = "show_category_titles";
 const _showAppNamesBelowIcons = "show_app_names_below_icons";
 const _showDateInStatusBar = "show_date_in_status_bar";
@@ -98,7 +99,7 @@ const String ACCENT_COLOR_ROSE = "FF4081";
 const String ACCENT_COLOR_ICE_BLUE = "80D8FF";
 
 class SettingsService extends ChangeNotifier {
-  static final defaultDateFormat = "EEE d MMM";
+  static final defaultDateFormat = "EEEE, dd/MM/yyyy";
   static final defaultTimeFormat = "H:mm";
   final SharedPreferences _sharedPreferences;
 
@@ -200,7 +201,21 @@ class SettingsService extends ChangeNotifier {
     return Color(int.parse("0xFF$hex"));
   }
 
-  SettingsService(this._sharedPreferences);
+  SettingsService(this._sharedPreferences) {
+    _applyRedesignDateFormatOnce();
+  }
+
+  /// A format saved before [defaultDateFormat] became "Friday, 20/11/2026" (e.g. "EEEE, dd.MM.yyyy"
+  /// on the TV) would otherwise keep winning. Switch to the default once; a format picked after
+  /// this is kept.
+  void _applyRedesignDateFormatOnce() {
+    if (_sharedPreferences.getBool(_dateFormatRedesignApplied) ?? false) return;
+    unawaited(_sharedPreferences.setBool(_dateFormatRedesignApplied, true));
+    final stored = _sharedPreferences.getString(_dateFormat);
+    if (stored != null && stored != defaultDateFormat) {
+      unawaited(_sharedPreferences.setString(_dateFormat, defaultDateFormat));
+    }
+  }
 
   Future<void> set(String key, bool value) async {
     await _sharedPreferences.setBool(key, value);

@@ -93,6 +93,9 @@ class MockWatchNextServiceForPanel extends ChangeNotifier implements WatchNextSe
   Future<void> launchItem(WatchNextItem item) async {}
 
   @override
+  void showFirstItemFor(String packageName) {}
+
+  @override
   void nextHeroItem() {}
 
   @override
